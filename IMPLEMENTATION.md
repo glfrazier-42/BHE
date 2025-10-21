@@ -35,6 +35,8 @@ black_hole_explosion/
 │   ├── test_initialization.py
 │   └── test_evolution.py
 ├── scripts/
+│   ├── validate_config.py   # Configuration validation tool ✅
+│   ├── show_ring0_state.py  # Ring 0 diagnostic display ✅
 │   ├── run_simulation.py    # Main entry point
 │   ├── run_sweep.py         # Parameter sweep
 │   └── analyze_results.py   # Batch analysis
@@ -83,8 +85,18 @@ pytest>=7.3.0
 - [x] Function to sample debris velocities from distribution
 - [x] Validation: check initial energy, momentum, angular momentum
 - [x] Save/load initial conditions to HDF5
+- [x] Add configuration validation (Schwarzschild radius check, Keplerian velocity)
+- [x] Implement velocity_mode: "keplerian" vs "manual" for Ring 0
+- [x] Create diagnostic scripts (show_ring0_state.py, validate_config.py)
 
 **Deliverable**: `initialization.py` module that creates valid initial states ✅
+
+**Additional accomplishments**:
+- Configuration validation with 15+ sanity checks (63 tests passing)
+- Schwarzschild radius enforcement for Ring 0
+- Keplerian orbital velocity auto-calculation
+- ASCII-only output (no Windows encoding issues)
+- Diagnostic tools: `scripts/validate_config.py`, `scripts/show_ring0_state.py`
 
 ### Stage 3: Time Evolution Engine (Direct N-body)
 - [ ] Implement `update_debris_particles()` with Numba
@@ -453,8 +465,26 @@ Vary:
 - Validation tests against known solutions (Kepler orbit, energy conservation)
 - Performance regression tests (track runtime for standard problem)
 
+### Coding Standards
+
+**ASCII-only requirement**:
+- All Python source code, comments, and docstrings must use only ASCII characters
+- Avoids Windows console encoding issues (cp1252 vs UTF-8)
+- Use text representations instead of Unicode symbols:
+  - ✓ `M_sun` instead of M☉
+  - ✓ `[OK]` instead of ✓
+  - ✓ `[ERROR]` instead of ✗
+  - ✓ Degrees symbol: write "degrees" or use ° only in comments if necessary
+- Exception: Data files (HDF5, plots) can contain Unicode as they're binary/image formats
+
+**Why this matters**:
+- Scripts run reliably across Windows (Cygwin, PowerShell, CMD), Linux, and macOS
+- No UnicodeEncodeError exceptions when printing to console
+- Code remains readable in all text editors regardless of encoding settings
+
 ### Documentation
 - Docstrings for all public functions
 - Comments explaining physics assumptions
 - README.md with quick start guide
 - Document any deviations from SPECIFICATION.md
+- All documentation must be ASCII-only (see Coding Standards above)

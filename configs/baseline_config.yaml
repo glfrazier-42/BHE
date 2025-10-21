@@ -9,10 +9,17 @@ central_black_hole:
 # Ring 0: The Tugboats - close, fast-moving black holes (OPTIONAL)
 ring_0:
   count: 0  # Baseline: no tugboats. Set to 4-8 for enhanced scenario
-  radius_gly: 3.0  # Just outside event horizon (only used if count > 0)
-  mass_per_bh_solar_masses: 1.0e+21  # Only used if count > 0
-  orbital_velocity_fraction_c: 0.8  # Only used if count > 0
-  capture_radius_gly: 0.5  # Accretion radius (only used if count > 0)
+  radius_gly: 14.0  # Just outside Schwarzschild radius (r_s ≈ 12.5 Gly)
+  mass_per_bh_solar_masses: 1.0e+21
+
+  # Velocity mode: "keplerian" or "manual"
+  # - keplerian: auto-calculate v = sqrt(G*M_central/r) for stable circular orbit
+  # - manual: use specified orbital_velocity_fraction_c (may be unstable orbit)
+  velocity_mode: "keplerian"  # v ≈ 0.67c at r=14 Gly
+  # Note: Schwarzschild radius for M=4e22 M_sun is ~12.5 Gly
+  # Ring 0 at 14 Gly gives stable orbit at 0.67c (highly relativistic!)
+
+  capture_radius_gly: 0.5  # Accretion radius
 
 # Ring 1: Inner shell - long-range gravitational structure
 ring_1:

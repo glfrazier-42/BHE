@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 import yaml
 from pathlib import Path
+import numpy as np
 
 from . import constants as const
 
@@ -33,10 +34,10 @@ class RingConfig:
 
         if self.is_static:
             return (f"Ring {self.ring_id}: {self.count} BHs at {radius_gly:.1f} Gly, "
-                   f"{mass_solar:.2e} M☉ each (static)")
+                   f"{mass_solar:.2e} M_sun each (static)")
         else:
             return (f"Ring {self.ring_id}: {self.count} BHs at {radius_gly:.1f} Gly, "
-                   f"{mass_solar:.2e} M☉ each, v={vel_frac_c:.2f}c")
+                   f"{mass_solar:.2e} M_sun each, v={vel_frac_c:.2f}c")
 
 
 @dataclass
@@ -99,6 +100,127 @@ class SimulationParameters:
     def total_bh_count(self) -> int:
         """Total number of black holes across all rings."""
         return sum(ring.count for ring in self.rings)
+
+    def validate(self) -> list:
+        """
+        Perform sanity checks on configuration parameters.
+
+        Returns:
+            List of warning/error messages. Empty list if all checks pass.
+        """
+        warnings = []
+
+        # Calculate Schwarzschild radius
+        r_schwarzschild = 2 * const.G * self.M_central / (const.c ** 2)
+        r_schwarzschild_gly = r_schwarzschild / const.Gly_to_m
+
+        # Check central mass is positive
+        if self.M_central <= 0:
+            warnings.append(f"ERROR: Central BH mass must be positive, got {self.M_central}")
+
+        # Check debris parameters
+        if self.debris_count <= 0:
+            warnings.append(f"ERROR: debris_count must be positive, got {self.debris_count}")
+
+        if self.debris_r_min >= self.debris_r_max:
+            warnings.append(f"ERROR: debris_r_min ({self.debris_r_min}) must be < debris_r_max ({self.debris_r_max})")
+
+        if self.debris_v_min >= self.debris_v_max:
+            warnings.append(f"ERROR: debris_v_min must be < debris_v_max")
+
+        if self.debris_v_max >= const.c:
+            warnings.append(f"ERROR: debris_v_max ({self.debris_v_max/const.c:.3f}c) must be < c")
+
+        # Check timestep
+        if self.dt <= 0:
+            warnings.append(f"ERROR: timestep dt must be positive, got {self.dt}")
+
+        if self.duration <= 0:
+            warnings.append(f"ERROR: duration must be positive, got {self.duration}")
+
+        if self.dt >= self.duration:
+            warnings.append(f"WARNING: timestep ({self.dt}) >= duration ({self.duration})")
+
+        # Check ring configurations
+        for ring in self.rings:
+            ring_name = f"Ring {ring.ring_id}"
+
+            # Check mass
+            if ring.mass_per_bh <= 0:
+                warnings.append(f"ERROR: {ring_name} mass must be positive")
+
+            # Check radius
+            if ring.radius <= 0:
+                warnings.append(f"ERROR: {ring_name} radius must be positive")
+
+            # For Ring 0, check if inside Schwarzschild radius
+            if ring.ring_id == 0 and ring.radius < r_schwarzschild:
+                warnings.append(
+                    f"ERROR: {ring_name} radius ({ring.radius/const.Gly_to_m:.2f} Gly) is INSIDE "
+                    f"Schwarzschild radius ({r_schwarzschild_gly:.2f} Gly). No stable orbit possible!"
+                )
+
+            # Warn if Ring 0 is very close to Schwarzschild radius
+            if ring.ring_id == 0 and ring.radius < 1.2 * r_schwarzschild:
+                warnings.append(
+                    f"WARNING: {ring_name} radius ({ring.radius/const.Gly_to_m:.2f} Gly) is very close to "
+                    f"Schwarzschild radius ({r_schwarzschild_gly:.2f} Gly). Orbit may be unstable."
+                )
+
+            # Check velocity for non-static rings
+            if not ring.is_static:
+                if ring.orbital_velocity <= 0:
+                    warnings.append(f"ERROR: {ring_name} orbital velocity must be positive")
+
+                if ring.orbital_velocity >= const.c:
+                    warnings.append(
+                        f"ERROR: {ring_name} orbital velocity ({ring.orbital_velocity/const.c:.3f}c) "
+                        f"must be < c"
+                    )
+
+                # Calculate Keplerian velocity and warn if significantly different
+                v_keplerian = np.sqrt(const.G * self.M_central / ring.radius)
+                v_ratio = ring.orbital_velocity / v_keplerian
+
+                if v_ratio < 0.5:
+                    warnings.append(
+                        f"WARNING: {ring_name} velocity ({ring.orbital_velocity/const.c:.3f}c) is much less than "
+                        f"Keplerian ({v_keplerian/const.c:.3f}c). Orbit will spiral inward rapidly."
+                    )
+                elif v_ratio > 2.0:
+                    warnings.append(
+                        f"WARNING: {ring_name} velocity ({ring.orbital_velocity/const.c:.3f}c) is much greater than "
+                        f"Keplerian ({v_keplerian/const.c:.3f}c). Orbit will spiral outward rapidly."
+                    )
+                elif abs(v_ratio - 1.0) > 0.1:
+                    warnings.append(
+                        f"INFO: {ring_name} velocity ({ring.orbital_velocity/const.c:.3f}c) differs from "
+                        f"Keplerian ({v_keplerian/const.c:.3f}c) by {abs(v_ratio-1.0)*100:.1f}%. "
+                        f"Orbit may not be stable."
+                    )
+
+            # Check capture radius for Ring 0
+            if ring.ring_id == 0:
+                if ring.capture_radius <= 0:
+                    warnings.append(f"WARNING: {ring_name} capture_radius should be positive for accretion")
+
+                if ring.capture_radius > ring.radius * 0.1:
+                    warnings.append(
+                        f"WARNING: {ring_name} capture_radius ({ring.capture_radius/const.Gly_to_m:.2f} Gly) "
+                        f"is large compared to orbital radius ({ring.radius/const.Gly_to_m:.2f} Gly). "
+                        f"May accrete too aggressively."
+                    )
+
+        # Check for overlapping rings (warn if rings are too close)
+        for i, ring1 in enumerate(self.rings):
+            for ring2 in self.rings[i+1:]:
+                if abs(ring1.radius - ring2.radius) < 1.0 * const.Gly_to_m:
+                    warnings.append(
+                        f"WARNING: Ring {ring1.ring_id} and Ring {ring2.ring_id} are very close "
+                        f"({abs(ring1.radius - ring2.radius)/const.Gly_to_m:.2f} Gly apart)"
+                    )
+
+        return warnings
 
     @classmethod
     def from_yaml(cls, filepath: str) -> 'SimulationParameters':
@@ -166,8 +288,21 @@ class SimulationParameters:
             is_static = to_bool(ring_data.get('is_static', False))
 
             # Orbital velocity (only for non-static rings)
-            if not is_static and 'orbital_velocity_fraction_c' in ring_data:
-                orbital_velocity = to_float(ring_data['orbital_velocity_fraction_c']) * const.c
+            if not is_static:
+                # Check velocity mode (keplerian or manual)
+                velocity_mode = ring_data.get('velocity_mode', 'manual')
+
+                if velocity_mode == 'keplerian':
+                    # Calculate Keplerian orbital velocity: v = sqrt(G * M / r)
+                    orbital_velocity = np.sqrt(const.G * M_central / radius)
+                elif velocity_mode == 'manual':
+                    # Use user-specified velocity
+                    if 'orbital_velocity_fraction_c' in ring_data:
+                        orbital_velocity = to_float(ring_data['orbital_velocity_fraction_c']) * const.c
+                    else:
+                        raise ValueError(f"{ring_name}: velocity_mode='manual' requires orbital_velocity_fraction_c")
+                else:
+                    raise ValueError(f"{ring_name}: velocity_mode must be 'keplerian' or 'manual', got '{velocity_mode}'")
             else:
                 orbital_velocity = 0.0
 
@@ -257,7 +392,7 @@ class SimulationParameters:
         """Human-readable representation."""
         lines = [
             f"Simulation: {self.simulation_name}",
-            f"Central BH: {self.M_central * const.kg_to_solar_mass:.2e} M☉",
+            f"Central BH: {self.M_central * const.kg_to_solar_mass:.2e} M_sun",
             f"Rings: {len(self.rings)} configured",
         ]
         for ring in self.rings:

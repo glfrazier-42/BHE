@@ -148,3 +148,80 @@ def test_simulation_parameters_repr():
     assert "Central BH" in repr_str
     assert "Debris: 1000 particles" in repr_str
     assert "Duration: 50.00 Gyr" in repr_str
+
+
+def test_keplerian_velocity_mode():
+    """Test that velocity_mode='keplerian' calculates correct orbital velocity."""
+    import tempfile
+    import yaml
+    import numpy as np
+
+    # Create a test config with Ring 0 in keplerian mode
+    test_config = {
+        'simulation_name': 'test_keplerian',
+        'output_directory': './test',
+        'central_black_hole': {
+            'mass_solar_masses': 4.0e+22
+        },
+        'ring_0': {
+            'count': 4,
+            'radius_gly': 3.0,
+            'mass_per_bh_solar_masses': 1.0e+21,
+            'velocity_mode': 'keplerian',  # Auto-calculate
+            'capture_radius_gly': 0.5
+        },
+        'debris_field': {
+            'particle_count': 100,
+            'position_min_gly': 0.01,
+            'position_max_gly': 0.1,
+            'velocity_min_fraction_c': 0.01,
+            'velocity_max_fraction_c': 0.9,
+            'distribution': 'uniform'
+        },
+        'simulation_control': {
+            'timestep_gyr': 0.001,
+            'duration_gyr': 10.0,
+            'output_interval_gyr': 0.1,
+            'checkpoint_interval_gyr': 1.0
+        },
+        'physics_options': {
+            'force_method': 'direct',
+            'include_debris_gravity': False,
+            'use_relativistic_mass': True
+        },
+        'diagnostics': {
+            'check_energy_conservation': True,
+            'check_momentum_conservation': True,
+            'log_level': 'INFO'
+        }
+    }
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        yaml.dump(test_config, f)
+        temp_path = f.name
+
+    try:
+        params = SimulationParameters.from_yaml(temp_path)
+
+        # Ring 0 should exist
+        assert len(params.rings) == 1
+        ring0 = params.rings[0]
+        assert ring0.ring_id == 0
+
+        # Calculate expected Keplerian velocity
+        # v = sqrt(G * M / r)
+        r = 3.0 * const.Gly_to_m
+        M = 4.0e+22 * const.M_sun
+        v_expected = np.sqrt(const.G * M / r)
+
+        # Check that orbital velocity matches Keplerian calculation
+        assert abs(ring0.orbital_velocity - v_expected) / v_expected < 1e-10
+
+        # For M=4e22 M_sun at r=3 Gly, Keplerian velocity is actually > c!
+        # This shows the configuration is unphysical - no stable orbit possible
+        # v = sqrt(G*M/r) ≈ 1.44c for these parameters
+        assert ring0.orbital_velocity > const.c  # Faster than light! Unphysical!
+
+    finally:
+        import os
+        os.unlink(temp_path)

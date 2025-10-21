@@ -64,10 +64,17 @@ central_black_hole:
 # Ring 0: The Tugboats - close, fast-moving black holes (OPTIONAL)
 ring_0:
   count: 0  # Baseline: no tugboats. Set to 4-8 for enhanced scenario
-  radius_gly: 3.0  # Just outside event horizon (only used if count > 0)
-  mass_per_bh_solar_masses: 1.0e21  # Only used if count > 0
-  orbital_velocity_fraction_c: 0.8  # Only used if count > 0
-  capture_radius_gly: 0.5  # Accretion radius (only used if count > 0)
+  radius_gly: 14.0  # Just outside Schwarzschild radius (r_s ≈ 12.5 Gly)
+  mass_per_bh_solar_masses: 1.0e+21
+
+  # Velocity mode: "keplerian" or "manual"
+  # - keplerian: auto-calculate v = sqrt(G*M_central/r) for stable circular orbit
+  # - manual: use specified orbital_velocity_fraction_c (may be unstable orbit)
+  velocity_mode: "keplerian"  # v ≈ 0.67c at r=14 Gly
+  # Note: Schwarzschild radius for M=4e22 M_sun is ~12.5 Gly
+  # Ring 0 at 14 Gly gives stable orbit at 0.67c (highly relativistic!)
+
+  capture_radius_gly: 0.5  # Accretion radius
 
 # Ring 1: Inner shell - long-range gravitational structure
 ring_1:
@@ -131,19 +138,20 @@ base_config: "baseline_config.yaml"
 
 # Parameters to sweep (will generate all combinations)
 sweep_parameters:
-  ring_0.radius_gly: [2.0, 3.0, 4.0, 5.0]
-  ring_0.orbital_velocity_fraction_c: [0.7, 0.8, 0.9]
+  ring_0.radius_gly: [14.0, 20.0, 30.0, 50.0]  # All > Schwarzschild radius
+  ring_0.velocity_mode: ["keplerian"]  # Use stable circular orbits
   ring_0.count: [4, 6, 8]
   ring_0.capture_radius_gly: [0.3, 0.5, 1.0]
 
-# Total runs: 4 × 3 × 3 × 3 = 108 simulations
+# Total runs: 4 × 1 × 3 × 3 = 36 simulations
+# Note: Keplerian velocities will vary from ~0.67c at 14 Gly to ~0.25c at 50 Gly
 ```
 
 ### The Core Hypothesis
 
 A supermassive black hole explodes, releasing all its mass as debris. Normally, this debris would gravitationally collapse back on itself (since ejection velocities < c). However, a system of orbiting black holes in close, high-speed orbits provides the escape mechanism:
 
-1. **Ring 0 (Inner Ring)**: Small number of black holes orbiting very close to the explosion center at extreme velocities (~0.7-0.9c)
+1. **Ring 0 (Inner Ring)**: Small number of black holes orbiting just outside the Schwarzschild radius at highly relativistic velocities (~0.67c for stable Keplerian orbit)
 2. These BHs immediately begin accreting nearby debris
 3. Their high velocity + accumulated mass creates a powerful gravitational drag effect
 4. They act as "tugboats," pulling debris streams outward and preventing collapse
@@ -152,11 +160,17 @@ A supermassive black hole explodes, releasing all its mass as debris. Normally, 
 ### Four-Ring Structure
 
 **Ring 0 - The Tugboats (NEW)**
-- **Location**: 2-5 Gly from center (just outside event horizon of central BH)
+- **Location**: ~14 Gly from center (just outside Schwarzschild radius r_s ≈ 12.5 Gly)
 - **Number**: 4-8 black holes
 - **Individual mass**: 10²⁰ - 10²¹ M☉ (much smaller than central BH)
 - **Total ring mass**: 1-5% of central BH mass
-- **Orbital velocity**: 0.7-0.9c
+- **Orbital velocity**: Keplerian velocity at chosen radius (v ≈ 0.67c at 14 Gly)
+  - **Note**: For M = 4×10²² M☉, Schwarzschild radius r_s = 2GM/c² ≈ 12.5 Gly
+  - Stable circular orbits only exist at r > r_s
+  - Keplerian velocity: v = √(GM/r) ≈ 0.67c at r = 14 Gly
+- **Velocity modes**:
+  - `keplerian`: Auto-calculate stable circular orbit velocity
+  - `manual`: Specify velocity (may result in unstable orbit if v ≠ v_keplerian)
 - **Role**: Accrete debris and drag it outward
 
 **Ring 1 - Inner Shell**
@@ -332,9 +346,14 @@ barnes_hut:
 ### Ring 0 Orbital Mechanics
 
 Initial configuration at t=0:
-- Place Ring 0 BHs in circular orbit at radius R₀ (2-5 Gly)
-- Orbital velocity for circular orbit: v_orbit = sqrt(G × M_central / R₀)
-- Adjust to desired velocity (may exceed circular orbit velocity)
+- Place Ring 0 BHs in circular orbit at radius R₀ (must be > Schwarzschild radius)
+- For M = 4×10²² M☉: r_s ≈ 12.5 Gly, so R₀ should be ≥ 14 Gly for physical stability
+- **Keplerian mode** (recommended): v_orbit = sqrt(G × M_central / R₀)
+  - At R₀ = 14 Gly: v ≈ 0.67c (highly relativistic!)
+- **Manual mode** (for experiments): Specify v directly
+  - If v > v_keplerian: orbit will spiral outward
+  - If v < v_keplerian: orbit will spiral inward
+  - Use for testing non-equilibrium scenarios
 
 ### Accretion Model
 
