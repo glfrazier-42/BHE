@@ -65,15 +65,15 @@ pytest>=7.3.0
 
 ### Stage 1: Core Physics Engine and Configuration
 - [x] Set up Python project structure with pip requirements
-- [ ] Implement `SimulationParameters.from_yaml()` with unit conversion
-- [ ] Implement physical constants module
-- [ ] Implement and test Lorentz factor calculation (with Numba)
-- [ ] Implement and test relativistic mass calculation
-- [ ] Implement and test gravitational acceleration (with Numba)
-- [ ] Write unit tests for all physics functions
-- [ ] Verify Numba compilation is working correctly
+- [x] Implement `SimulationParameters.from_yaml()` with unit conversion
+- [x] Implement physical constants module
+- [x] Implement and test Lorentz factor calculation (with Numba)
+- [x] Implement and test relativistic mass calculation
+- [x] Implement and test gravitational acceleration (with Numba)
+- [x] Write unit tests for all physics functions
+- [x] Verify Numba compilation is working correctly
 
-**Deliverable**: `physics.py` module with JIT-compiled functions passing all tests
+**Deliverable**: `physics.py` module with JIT-compiled functions passing all tests ✅
 
 ### Stage 2: Initialization Module
 - [ ] Implement `SimulationState` class with NumPy arrays
