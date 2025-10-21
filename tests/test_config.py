@@ -1,0 +1,150 @@
+"""
+Unit tests for configuration loading and parsing.
+"""
+
+import pytest
+from pathlib import Path
+from src.config import SimulationParameters, RingConfig
+from src import constants as const
+
+
+def test_load_baseline_config():
+    """Test loading the baseline configuration file."""
+    config_path = Path(__file__).parent.parent / 'configs' / 'baseline_config.yaml'
+    params = SimulationParameters.from_yaml(str(config_path))
+
+    # Check basic metadata
+    assert params.simulation_name == "baseline_ring0_test"
+    assert params.output_directory == "./results/baseline"
+
+    # Check central BH mass (4e22 solar masses)
+    expected_mass = 4.0e22 * const.M_sun
+    assert abs(params.M_central - expected_mass) / expected_mass < 1e-10
+
+    # Check debris field
+    assert params.debris_count == 1000
+    assert params.debris_distribution == "uniform"
+
+    # Check debris velocities (converted from fraction of c)
+    assert abs(params.debris_v_min - 0.01 * const.c) / const.c < 1e-10
+    assert abs(params.debris_v_max - 0.92 * const.c) / const.c < 1e-10
+
+    # Check debris mass per particle
+    expected_debris_mass = params.M_central / params.debris_count
+    assert params.debris_mass_per_particle == expected_debris_mass
+
+
+def test_ring_configurations():
+    """Test that rings are parsed correctly."""
+    config_path = Path(__file__).parent.parent / 'configs' / 'baseline_config.yaml'
+    params = SimulationParameters.from_yaml(str(config_path))
+
+    # Baseline has Ring 0 disabled (count=0), so should have 3 rings
+    assert len(params.rings) == 3
+    assert params.total_bh_count == 4 + 6 + 8  # Ring 1, 2, 3 counts
+
+    # Check Ring 1 (should be first in list since Ring 0 is disabled)
+    ring1 = params.rings[0]
+    assert ring1.ring_id == 1
+    assert ring1.count == 4
+    assert ring1.is_static == True
+    assert abs(ring1.radius - 100.0 * const.Gly_to_m) / const.Gly_to_m < 1e-10
+    assert abs(ring1.mass_per_bh - 5.0e21 * const.M_sun) / const.M_sun < 1e-10
+
+    # Check Ring 2
+    ring2 = params.rings[1]
+    assert ring2.ring_id == 2
+    assert ring2.count == 6
+    assert ring2.is_static == True
+
+    # Check Ring 3
+    ring3 = params.rings[2]
+    assert ring3.ring_id == 3
+    assert ring3.count == 8
+    assert ring3.is_static == True
+
+
+def test_simulation_control_parameters():
+    """Test simulation control parameters are converted correctly."""
+    config_path = Path(__file__).parent.parent / 'configs' / 'baseline_config.yaml'
+    params = SimulationParameters.from_yaml(str(config_path))
+
+    # Check time conversions (Gyr to seconds)
+    assert abs(params.dt - 0.001 * const.Gyr_to_s) / const.Gyr_to_s < 1e-10
+    assert abs(params.duration - 50.0 * const.Gyr_to_s) / const.Gyr_to_s < 1e-10
+    assert abs(params.output_interval - 0.1 * const.Gyr_to_s) / const.Gyr_to_s < 1e-10
+    assert abs(params.checkpoint_interval - 5.0 * const.Gyr_to_s) / const.Gyr_to_s < 1e-10
+
+
+def test_physics_options():
+    """Test physics options are loaded correctly."""
+    config_path = Path(__file__).parent.parent / 'configs' / 'baseline_config.yaml'
+    params = SimulationParameters.from_yaml(str(config_path))
+
+    assert params.force_method == "direct"
+    assert params.include_debris_gravity == False
+    assert params.use_relativistic_mass == True
+
+    # Barnes-Hut parameters
+    assert params.barnes_hut_theta == 0.5
+    assert params.barnes_hut_max_particles_per_leaf == 8
+    assert params.barnes_hut_tree_rebuild_interval == 10
+
+
+def test_diagnostics_options():
+    """Test diagnostics options are loaded correctly."""
+    config_path = Path(__file__).parent.parent / 'configs' / 'baseline_config.yaml'
+    params = SimulationParameters.from_yaml(str(config_path))
+
+    assert params.check_energy_conservation == True
+    assert params.check_momentum_conservation == True
+    assert params.log_level == "INFO"
+
+
+def test_config_file_not_found():
+    """Test that appropriate error is raised for missing config file."""
+    with pytest.raises(FileNotFoundError):
+        SimulationParameters.from_yaml('nonexistent_config.yaml')
+
+
+def test_ring_config_repr():
+    """Test RingConfig string representation."""
+    # Static ring
+    ring = RingConfig(
+        ring_id=1,
+        count=4,
+        radius=100.0 * const.Gly_to_m,
+        mass_per_bh=5.0e21 * const.M_sun,
+        is_static=True
+    )
+    repr_str = repr(ring)
+    assert "Ring 1" in repr_str
+    assert "4 BHs" in repr_str
+    assert "100.0 Gly" in repr_str
+    assert "static" in repr_str
+
+    # Dynamic ring (Ring 0)
+    ring0 = RingConfig(
+        ring_id=0,
+        count=4,
+        radius=3.0 * const.Gly_to_m,
+        mass_per_bh=1.0e21 * const.M_sun,
+        is_static=False,
+        orbital_velocity=0.8 * const.c,
+        capture_radius=0.5 * const.Gly_to_m
+    )
+    repr_str = repr(ring0)
+    assert "Ring 0" in repr_str
+    assert "v=0.80c" in repr_str
+
+
+def test_simulation_parameters_repr():
+    """Test SimulationParameters string representation."""
+    config_path = Path(__file__).parent.parent / 'configs' / 'baseline_config.yaml'
+    params = SimulationParameters.from_yaml(str(config_path))
+
+    repr_str = repr(params)
+    assert "baseline_ring0_test" in repr_str
+    assert "Central BH" in repr_str
+    assert "Debris: 1000 particles" in repr_str
+    assert "Duration: 50.00 Gyr" in repr_str

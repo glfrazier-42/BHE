@@ -1,0 +1,56 @@
+{
+    // VS Code tasks for common operations
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Run Tests",
+            "type": "shell",
+            "command": "${workspaceFolder}/venv/Scripts/python.exe",
+            "args": [
+                "-m",
+                "pytest",
+                "tests/",
+                "-v"
+            ],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Run Baseline Simulation",
+            "type": "shell",
+            "command": "${workspaceFolder}/venv/Scripts/python.exe",
+            "args": [
+                "scripts/run_simulation.py",
+                "--config",
+                "configs/baseline_config.yaml"
+            ],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Install Dependencies",
+            "type": "shell",
+            "command": "${workspaceFolder}/venv/Scripts/python.exe",
+            "args": [
+                "-m",
+                "pip",
+                "install",
+                "-r",
+                "requirements.txt"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        }
+    ]
+}

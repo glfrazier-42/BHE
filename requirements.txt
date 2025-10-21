@@ -1,0 +1,7 @@
+numpy
+numba
+pyyaml
+matplotlib
+h5py
+tqdm
+pytest

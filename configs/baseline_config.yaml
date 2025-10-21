@@ -1,0 +1,67 @@
+# Baseline simulation: Test Ring 0 tugboat effect without debris gravity
+simulation_name: "baseline_ring0_test"
+output_directory: "./results/baseline"
+
+# Central black hole that explodes
+central_black_hole:
+  mass_solar_masses: 4.0e+22  # ~200% visible universe mass
+
+# Ring 0: The Tugboats - close, fast-moving black holes (OPTIONAL)
+ring_0:
+  count: 0  # Baseline: no tugboats. Set to 4-8 for enhanced scenario
+  radius_gly: 3.0  # Just outside event horizon (only used if count > 0)
+  mass_per_bh_solar_masses: 1.0e+21  # Only used if count > 0
+  orbital_velocity_fraction_c: 0.8  # Only used if count > 0
+  capture_radius_gly: 0.5  # Accretion radius (only used if count > 0)
+
+# Ring 1: Inner shell - long-range gravitational structure
+ring_1:
+  count: 4
+  radius_gly: 100.0
+  mass_per_bh_solar_masses: 5.0e+21
+  is_static: true
+
+# Ring 2: Middle shell - primary acceleration zone
+ring_2:
+  count: 6
+  radius_gly: 150.0
+  mass_per_bh_solar_masses: 1.0e+22
+  is_static: true
+
+# Ring 3: Outer shell - outer gravitational boundary
+ring_3:
+  count: 8
+  radius_gly: 200.0
+  mass_per_bh_solar_masses: 1.5e+22
+  is_static: true
+
+# Debris field parameters
+debris_field:
+  particle_count: 1000
+  velocity_min_fraction_c: 0.01
+  velocity_max_fraction_c: 0.92
+  distribution: "uniform"  # uniform in solid angle
+  # Note: mass_per_particle is calculated as M_central / particle_count
+
+# Simulation control
+simulation_control:
+  timestep_gyr: 0.001  # May need smaller for stability
+  duration_gyr: 50.0
+  output_interval_gyr: 0.1  # How often to save state
+  checkpoint_interval_gyr: 5.0  # Full checkpoint for restart
+
+# Physics options
+physics_options:
+  force_method: "direct"  # "direct" or "barnes_hut"
+  include_debris_gravity: false  # Phase 1: off, Phase 2: on
+  use_relativistic_mass: true
+  barnes_hut:
+    opening_angle_theta: 0.5
+    max_particles_per_leaf: 8
+    tree_rebuild_interval: 10
+
+# Logging and diagnostics
+diagnostics:
+  check_energy_conservation: true
+  check_momentum_conservation: true
+  log_level: "INFO"

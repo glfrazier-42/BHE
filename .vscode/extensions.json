@@ -1,0 +1,23 @@
+{
+    // Recommended extensions for this project
+    "recommendations": [
+        // Python
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+
+        // Markdown
+        "yzhang.markdown-all-in-one",
+        "bierner.markdown-preview-github-styles",
+        "DavidAnson.vscode-markdownlint",
+
+        // YAML
+        "redhat.vscode-yaml",
+
+        // Git
+        "eamodio.gitlens",
+
+        // General productivity
+        "streetsidesoftware.code-spell-checker",
+        "visualstudioexptteam.vscodeintellicode"
+    ]
+}

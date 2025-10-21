@@ -1,0 +1,62 @@
+{
+    // Python Configuration
+    "python.defaultInterpreterPath": "${workspaceFolder}/venv/Scripts/python.exe",
+    "python.terminal.activateEnvironment": true,
+
+    // Linting and Formatting
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": false,
+    "python.linting.flake8Enabled": true,
+    "python.formatting.provider": "black",
+    "editor.formatOnSave": true,
+
+    // Testing
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+
+    // Markdown
+    "markdown.preview.scrollPreviewWithEditor": true,
+    "markdown.preview.scrollEditorWithPreview": true,
+    "markdown.preview.doubleClickToSwitchToEditor": true,
+    "[markdown]": {
+        "editor.wordWrap": "on",
+        "editor.quickSuggestions": {
+            "comments": "off",
+            "strings": "off",
+            "other": "off"
+        },
+        "editor.formatOnSave": false
+    },
+
+    // File Associations
+    "files.associations": {
+        "*.yaml": "yaml",
+        "*.yml": "yaml"
+    },
+
+    // Exclude files from explorer
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "**/.pytest_cache": true,
+        "**/*.egg-info": true
+    },
+
+    // Git
+    "git.ignoreLimitWarning": true,
+
+    // Editor
+    "editor.rulers": [88],  // Black's default line length
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+
+    // File watching
+    "files.watcherExclude": {
+        "**/venv/**": true,
+        "**/.git/objects/**": true,
+        "**/results/**": true
+    }
+}

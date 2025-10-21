@@ -1,0 +1,39 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Python: Run Simulation",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/run_simulation.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--config",
+                "${workspaceFolder}/configs/baseline_config.yaml"
+            ],
+            "justMyCode": false
+        },
+        {
+            "name": "Python: Debug Tests",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "tests/",
+                "-v"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
+    ]
+}
