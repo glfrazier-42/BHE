@@ -38,6 +38,8 @@ ring_3:
 # Debris field parameters
 debris_field:
   particle_count: 1000
+  position_min_gly: 0.01  # Minimum initial radius
+  position_max_gly: 0.1   # Maximum initial radius (start near center)
   velocity_min_fraction_c: 0.01
   velocity_max_fraction_c: 0.92
   distribution: "uniform"  # uniform in solid angle

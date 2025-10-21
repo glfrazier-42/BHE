@@ -63,6 +63,8 @@ class SimulationParameters:
 
     # Debris field
     debris_count: int = 1000
+    debris_r_min: float = 0.0  # meters
+    debris_r_max: float = 0.0  # meters
     debris_v_min: float = 0.0  # m/s
     debris_v_max: float = 0.0  # m/s
     debris_distribution: str = "uniform"
@@ -188,6 +190,8 @@ class SimulationParameters:
         # Parse debris field parameters
         debris_data = config['debris_field']
         debris_count = to_int(debris_data['particle_count'])
+        debris_r_min = to_float(debris_data['position_min_gly']) * const.Gly_to_m
+        debris_r_max = to_float(debris_data['position_max_gly']) * const.Gly_to_m
         debris_v_min = to_float(debris_data['velocity_min_fraction_c']) * const.c
         debris_v_max = to_float(debris_data['velocity_max_fraction_c']) * const.c
         debris_distribution = debris_data.get('distribution', 'uniform')
@@ -229,6 +233,8 @@ class SimulationParameters:
             M_central=M_central,
             rings=rings,
             debris_count=debris_count,
+            debris_r_min=debris_r_min,
+            debris_r_max=debris_r_max,
             debris_v_min=debris_v_min,
             debris_v_max=debris_v_max,
             debris_distribution=debris_distribution,

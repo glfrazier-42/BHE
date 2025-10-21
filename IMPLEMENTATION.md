@@ -76,15 +76,15 @@ pytest>=7.3.0
 **Deliverable**: `physics.py` module with JIT-compiled functions passing all tests ✅
 
 ### Stage 2: Initialization Module
-- [ ] Implement `SimulationState` class with NumPy arrays
-- [ ] Function to initialize Ring 0 in circular orbit
-- [ ] Function to initialize Rings 1-3 in static positions (2-arm spiral)
-- [ ] Function to sample debris particles uniformly over solid angle
-- [ ] Function to sample debris velocities from distribution
-- [ ] Validation: check initial energy, momentum, angular momentum
-- [ ] Save/load initial conditions to HDF5
+- [x] Implement `SimulationState` class with NumPy arrays
+- [x] Function to initialize Ring 0 in circular orbit
+- [x] Function to initialize Rings 1-3 in static positions (2-arm spiral)
+- [x] Function to sample debris particles uniformly over solid angle
+- [x] Function to sample debris velocities from distribution
+- [x] Validation: check initial energy, momentum, angular momentum
+- [x] Save/load initial conditions to HDF5
 
-**Deliverable**: `initialization.py` module that creates valid initial states
+**Deliverable**: `initialization.py` module that creates valid initial states ✅
 
 ### Stage 3: Time Evolution Engine (Direct N-body)
 - [ ] Implement `update_debris_particles()` with Numba
