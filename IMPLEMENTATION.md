@@ -141,16 +141,27 @@ pytest>=7.3.0
 - **All 94 tests passing across entire project**
 
 ### Stage 5: Analysis and Visualization
-- [ ] Calculate redshift from velocity: z = sqrt((1+β)/(1-β)) - 1
-- [ ] Calculate proper time for each debris particle
-- [ ] Plot: redshift vs. distance for debris particles
-- [ ] Plot: proper time vs. redshift
-- [ ] Plot: Ring 0 trajectories in 3D
-- [ ] Plot: escape fraction vs. time
-- [ ] Animate: 3D visualization of system evolution
-- [ ] Generate summary statistics report
+- [x] Calculate redshift from velocity: z = sqrt((1+β)/(1-β)) - 1
+- [x] Calculate proper time for each debris particle
+- [x] Plot: redshift vs. distance for debris particles
+- [x] Plot: proper time vs. redshift
+- [x] Plot: Ring 0 trajectories in 3D
+- [x] Plot: escape fraction vs. time
+- [x] Animate: 3D visualization of system evolution
+- [x] Generate summary statistics report
 
-**Deliverable**: `analysis.py` and `visualization.py` modules
+**Deliverable**: `analysis.py` and `visualization.py` modules ✅
+
+**Additional accomplishments**:
+- Relativistic Doppler redshift: z = sqrt((1+β)/(1-β)) - 1 with β clamping at 0.9999
+- Publication-quality plots: 300 DPI, proper labels and units (Gly, Gyr)
+- Matplotlib Agg backend for non-interactive operation and file saving
+- 3D animation with PillowWriter (GIF export), configurable frame skip and FPS
+- Comprehensive analysis functions: escape fraction, final debris state, Ring 0 trajectories
+- ASCII text summary report with particle statistics and conservation metrics
+- Edge case handling: no BHs, minimal data, empty trajectories
+- Test coverage: 20 new tests (12 analysis + 8 visualization)
+- **All 114 tests passing across entire project**
 
 ### Stage 6: Baseline Simulation (Phase 1)
 - [ ] Create `baseline_config.yaml`
