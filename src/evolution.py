@@ -673,7 +673,8 @@ def evolve_system(
     state: SimulationState,
     params: SimulationParameters,
     n_steps: int,
-    show_progress: bool = True
+    show_progress: bool = True,
+    recorder=None
 ) -> dict:
     """
     Evolve the simulation forward for n_steps timesteps.
@@ -683,6 +684,7 @@ def evolve_system(
     2. Detects accretion events
     3. Applies momentum conservation for accreted particles
     4. Updates simulation time and timestep counter
+    5. Records data to HDF5 if recorder provided
 
     The simultaneous update ensures that both debris and BHs see the same initial
     state at each timestep, which is critical for time-reversibility and energy
@@ -693,6 +695,7 @@ def evolve_system(
         params: SimulationParameters object
         n_steps: Number of timesteps to evolve
         show_progress: Whether to show progress bar (tqdm)
+        recorder: Optional SimulationRecorder for data output
 
     Returns:
         Dictionary with simulation statistics:
@@ -706,6 +709,21 @@ def evolve_system(
 
     # Statistics tracking
     total_accreted = 0
+
+    # Calculate output and checkpoint intervals
+    if recorder is not None and params.output_interval > 0:
+        output_every = max(1, int(params.output_interval / dt))
+    else:
+        output_every = None
+
+    if recorder is not None and params.checkpoint_interval > 0:
+        checkpoint_every = max(1, int(params.checkpoint_interval / dt))
+    else:
+        checkpoint_every = None
+
+    # Record initial state
+    if recorder is not None:
+        recorder.record_timestep(state, check_conservation=True)
 
     # Progress bar
     if show_progress:
@@ -756,6 +774,17 @@ def evolve_system(
         # 5. Update simulation time and timestep counter
         state.time += dt
         state.timestep_count += 1
+
+        # 6. Record timestep data if needed
+        if recorder is not None and output_every is not None:
+            if (step + 1) % output_every == 0:
+                recorder.record_timestep(state, check_conservation=True)
+
+        # 7. Save checkpoint if needed
+        if recorder is not None and checkpoint_every is not None:
+            if (step + 1) % checkpoint_every == 0:
+                checkpoint_name = f"step_{state.timestep_count}"
+                recorder.save_checkpoint(state, checkpoint_name)
 
         # Update progress bar
         if show_progress:

@@ -118,14 +118,27 @@ pytest>=7.3.0
 - Circular orbit stability verified (test now passes with leapfrog integration)
 
 ### Stage 4: Data Recording and Checkpointing
-- [ ] Implement time series recording to HDF5 (efficient for large data)
-- [ ] Record: time, BH positions/velocities/masses, sample of debris states
-- [ ] Implement checkpoint/restart functionality
-- [ ] Implement energy and momentum conservation checks
-- [ ] Log warnings when conservation violated by >1%
-- [ ] Save configuration YAML with each output file for reproducibility
+- [x] Implement time series recording to HDF5 (efficient for large data)
+- [x] Record: time, BH positions/velocities/masses, debris states
+- [x] Implement checkpoint/restart functionality
+- [x] Implement energy and momentum conservation checks
+- [x] Log warnings when conservation violated by >1%
+- [x] Save configuration with each output file for reproducibility
 
-**Deliverable**: `output.py` module for data persistence
+**Deliverable**: `output.py` module for data persistence ✅
+
+**Additional accomplishments**:
+- Complete SimulationRecorder class with context manager support
+- HDF5 file structure with timeseries, conservation metrics, and checkpoints groups
+- Gzip compression (level 4) for efficient storage
+- Pre-allocated arrays sized based on output_interval
+- Energy and momentum conservation tracking at every output timestep
+- Relative error calculation with 1% violation threshold warnings
+- Full state checkpoint save/load for restart capability
+- Integration with evolve_system() for automatic recording
+- Comprehensive test coverage: 13 tests passing for output module
+- Fixed test_physics.py imports (force→acceleration) from Stage 3
+- **All 94 tests passing across entire project**
 
 ### Stage 5: Analysis and Visualization
 - [ ] Calculate redshift from velocity: z = sqrt((1+β)/(1-β)) - 1

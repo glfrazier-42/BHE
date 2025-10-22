@@ -14,8 +14,8 @@ from src.physics import (
     lorentz_factor,
     lorentz_factor_scalar,
     relativistic_mass,
-    gravitational_force_direct,
-    calculate_force_from_bhs,
+    gravitational_acceleration_direct,
+    calculate_acceleration_from_bhs,
     calculate_kinetic_energy,
     calculate_potential_energy
 )
@@ -122,8 +122,8 @@ class TestGravitationalForce:
         mass_j = 1.0e30
         velocity_j = np.array([0.0, 0.0, 0.0])
 
-        force = gravitational_force_direct(pos_i, pos_j, mass_j, velocity_j, False)
-        assert np.allclose(force, np.zeros(3))
+        accel = gravitational_acceleration_direct(pos_i, pos_j, mass_j, velocity_j, False)
+        assert np.allclose(accel, np.zeros(3))
 
     def test_newtonian_limit(self):
         """Test force in Newtonian limit (low velocity, no relativistic correction)."""
@@ -132,74 +132,74 @@ class TestGravitationalForce:
         mass_j = 1.0e30  # 1 solar mass
         velocity_j = np.array([0.0, 0.0, 0.0])
 
-        force = gravitational_force_direct(pos_i, pos_j, mass_j, velocity_j, False)
+        accel = gravitational_acceleration_direct(pos_i, pos_j, mass_j, velocity_j, False)
 
-        # Expected: F = G × M / r² in x-direction
+        # Expected: a = G × M / r² in x-direction
         r = const.Gly_to_m
         expected_magnitude = const.G * mass_j / (r * r)
-        expected_force = np.array([expected_magnitude, 0.0, 0.0])
+        expected_accel = np.array([expected_magnitude, 0.0, 0.0])
 
-        assert np.allclose(force, expected_force, rtol=1e-10)
+        assert np.allclose(accel, expected_accel, rtol=1e-10)
 
-    def test_relativistic_mass_increases_force(self):
-        """Force should increase when using relativistic mass for moving BH."""
+    def test_relativistic_mass_increases_accel(self):
+        """Acceleration should increase when using relativistic mass for moving BH."""
         pos_i = np.array([0.0, 0.0, 0.0])
         pos_j = np.array([const.Gly_to_m, 0.0, 0.0])
         mass_j = 1.0e30
         velocity_j = np.array([0.0, 0.8 * const.c, 0.0])  # Moving at 0.8c
 
-        force_nonrel = gravitational_force_direct(pos_i, pos_j, mass_j, velocity_j, False)
-        force_rel = gravitational_force_direct(pos_i, pos_j, mass_j, velocity_j, True)
+        accel_nonrel = gravitational_acceleration_direct(pos_i, pos_j, mass_j, velocity_j, False)
+        accel_rel = gravitational_acceleration_direct(pos_i, pos_j, mass_j, velocity_j, True)
 
-        # Relativistic force should be larger
-        assert np.linalg.norm(force_rel) > np.linalg.norm(force_nonrel)
+        # Relativistic acceleration should be larger
+        assert np.linalg.norm(accel_rel) > np.linalg.norm(accel_nonrel)
 
         # Check ratio matches γ(0.8c) ≈ 1.667
         gamma = 1.0 / np.sqrt(1.0 - 0.64)
-        ratio = np.linalg.norm(force_rel) / np.linalg.norm(force_nonrel)
+        ratio = np.linalg.norm(accel_rel) / np.linalg.norm(accel_nonrel)
         assert abs(ratio - gamma) / gamma < 1e-6
 
-    def test_force_direction(self):
-        """Force should point from particle i toward particle j."""
+    def test_accel_direction(self):
+        """Acceleration should point from particle i toward particle j."""
         pos_i = np.array([0.0, 0.0, 0.0])
         pos_j = np.array([1.0e15, 2.0e15, 3.0e15])  # Arbitrary position
         mass_j = 1.0e30
         velocity_j = np.array([0.0, 0.0, 0.0])
 
-        force = gravitational_force_direct(pos_i, pos_j, mass_j, velocity_j, False)
+        accel = gravitational_acceleration_direct(pos_i, pos_j, mass_j, velocity_j, False)
 
-        # Force direction should be parallel to (pos_j - pos_i)
+        # Acceleration direction should be parallel to (pos_j - pos_i)
         r_vec = pos_j - pos_i
-        force_dir = force / np.linalg.norm(force)
+        accel_dir = accel / np.linalg.norm(accel)
         r_dir = r_vec / np.linalg.norm(r_vec)
 
-        assert np.allclose(force_dir, r_dir, rtol=1e-10)
+        assert np.allclose(accel_dir, r_dir, rtol=1e-10)
 
 
-class TestForceFromBHs:
-    """Tests for force calculations from multiple black holes."""
+class TestAccelFromBHs:
+    """Tests for acceleration calculations from multiple black holes."""
 
     def test_single_bh(self):
-        """Test force from a single black hole."""
+        """Test acceleration from a single black hole."""
         pos = np.array([0.0, 0.0, 0.0])
         bh_positions = np.array([[const.Gly_to_m, 0.0, 0.0]])
         bh_masses = np.array([1.0e30])
         bh_velocities = np.array([[0.0, 0.0, 0.0]])
         bh_is_static = np.array([True])
 
-        force = calculate_force_from_bhs(
+        accel = calculate_acceleration_from_bhs(
             pos, bh_positions, bh_masses, bh_velocities, bh_is_static, False
         )
 
-        # Expected: F = G × M / r² in x-direction
+        # Expected: a = G × M / r² in x-direction
         r = const.Gly_to_m
-        expected_force_mag = const.G * bh_masses[0] / (r * r)
-        expected = np.array([expected_force_mag, 0.0, 0.0])
+        expected_accel_mag = const.G * bh_masses[0] / (r * r)
+        expected = np.array([expected_accel_mag, 0.0, 0.0])
 
-        assert np.allclose(force, expected, rtol=1e-10)
+        assert np.allclose(accel, expected, rtol=1e-10)
 
     def test_multiple_bhs_superposition(self):
-        """Test that forces from multiple BHs add (superposition principle)."""
+        """Test that accelerations from multiple BHs add (superposition principle)."""
         pos = np.array([0.0, 0.0, 0.0])
 
         # Two BHs on opposite sides
@@ -211,12 +211,12 @@ class TestForceFromBHs:
         bh_velocities = np.zeros((2, 3))
         bh_is_static = np.array([True, True])
 
-        force = calculate_force_from_bhs(
+        accel = calculate_acceleration_from_bhs(
             pos, bh_positions, bh_masses, bh_velocities, bh_is_static, False
         )
 
-        # Forces should cancel out (equal masses, opposite directions)
-        assert np.allclose(force, np.zeros(3), atol=1e-50)
+        # Accelerations should cancel out (equal masses, opposite directions)
+        assert np.allclose(accel, np.zeros(3), atol=1e-50)
 
 
 class TestEnergyCalculations:
