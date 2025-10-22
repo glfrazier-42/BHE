@@ -15,7 +15,7 @@ from src.physics import (
     lorentz_factor_scalar,
     relativistic_mass,
     gravitational_force_direct,
-    calculate_acceleration_from_bhs,
+    calculate_force_from_bhs,
     calculate_kinetic_energy,
     calculate_potential_energy
 )
@@ -176,29 +176,27 @@ class TestGravitationalForce:
         assert np.allclose(force_dir, r_dir, rtol=1e-10)
 
 
-class TestAccelerationFromBHs:
-    """Tests for acceleration calculations from multiple black holes."""
+class TestForceFromBHs:
+    """Tests for force calculations from multiple black holes."""
 
     def test_single_bh(self):
-        """Test acceleration from a single black hole."""
+        """Test force from a single black hole."""
         pos = np.array([0.0, 0.0, 0.0])
         bh_positions = np.array([[const.Gly_to_m, 0.0, 0.0]])
         bh_masses = np.array([1.0e30])
         bh_velocities = np.array([[0.0, 0.0, 0.0]])
         bh_is_static = np.array([True])
 
-        accel = calculate_acceleration_from_bhs(
+        force = calculate_force_from_bhs(
             pos, bh_positions, bh_masses, bh_velocities, bh_is_static, False
         )
 
         # Expected: F = G × M / r² in x-direction
-        # But this function returns force, not acceleration
-        # (will be divided by particle mass later)
         r = const.Gly_to_m
         expected_force_mag = const.G * bh_masses[0] / (r * r)
         expected = np.array([expected_force_mag, 0.0, 0.0])
 
-        assert np.allclose(accel, expected, rtol=1e-10)
+        assert np.allclose(force, expected, rtol=1e-10)
 
     def test_multiple_bhs_superposition(self):
         """Test that forces from multiple BHs add (superposition principle)."""
@@ -213,12 +211,12 @@ class TestAccelerationFromBHs:
         bh_velocities = np.zeros((2, 3))
         bh_is_static = np.array([True, True])
 
-        accel = calculate_acceleration_from_bhs(
+        force = calculate_force_from_bhs(
             pos, bh_positions, bh_masses, bh_velocities, bh_is_static, False
         )
 
         # Forces should cancel out (equal masses, opposite directions)
-        assert np.allclose(accel, np.zeros(3), atol=1e-50)
+        assert np.allclose(force, np.zeros(3), atol=1e-50)
 
 
 class TestEnergyCalculations:

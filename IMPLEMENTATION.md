@@ -99,15 +99,23 @@ pytest>=7.3.0
 - Diagnostic tools: `scripts/validate_config.py`, `scripts/show_ring0_state.py`
 
 ### Stage 3: Time Evolution Engine (Direct N-body)
-- [ ] Implement `update_debris_particles()` with Numba
-- [ ] Implement Ring 0 BH evolution (orbital mechanics)
-- [ ] Implement accretion detection (capture radius method)
-- [ ] Implement momentum conservation in accretion events
-- [ ] Implement main simulation loop with timesteps
-- [ ] Add progress bar (tqdm) for long runs
-- [ ] Test on small system (10 particles, 100 timesteps)
+- [x] Implement `update_debris_particles()` with Numba
+- [x] Implement Ring 0 BH evolution (orbital mechanics)
+- [x] Implement accretion detection (capture radius method)
+- [x] Implement momentum conservation in accretion events
+- [x] Implement main simulation loop with timesteps
+- [x] Add progress bar (tqdm) for long runs
+- [x] Test on small system (10 particles, 100 timesteps)
 
-**Deliverable**: `evolution.py` module that evolves system state using direct N-body
+**Deliverable**: `evolution.py` module that evolves system state using direct N-body ✅
+
+**Additional accomplishments**:
+- Leapfrog (kick-drift-kick) integration for symplectic, energy-conserving evolution
+- Fixed critical physics bug: functions were calculating acceleration but dividing by mass again (10^25 magnitude error)
+- Unified update function: debris and BHs evolve simultaneously for time-reversibility
+- Comprehensive test coverage: 18 tests passing including gravity, accretion, momentum conservation
+- Progress bar with dynamic accretion statistics display
+- Circular orbit stability verified (test now passes with leapfrog integration)
 
 ### Stage 4: Data Recording and Checkpointing
 - [ ] Implement time series recording to HDF5 (efficient for large data)

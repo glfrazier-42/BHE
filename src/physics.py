@@ -90,11 +90,11 @@ def relativistic_mass(rest_mass, velocity):
 
 
 @jit(nopython=True)
-def gravitational_force_direct(pos_i, pos_j, mass_j, velocity_j, use_relativistic):
+def gravitational_acceleration_direct(pos_i, pos_j, mass_j, velocity_j, use_relativistic):
     """
-    Calculate gravitational force on particle i from particle/BH j.
+    Calculate gravitational acceleration on particle i from particle/BH j.
 
-    F_ij = G × m_j_eff / r² × r_hat
+    a_ij = G × m_j_eff / r² × r_hat
 
     where:
     - m_j_eff = γ(v_j) × m_j_rest (if use_relativistic)
@@ -108,11 +108,12 @@ def gravitational_force_direct(pos_i, pos_j, mass_j, velocity_j, use_relativisti
         use_relativistic: Whether to use relativistic mass correction
 
     Returns:
-        force: 3D force vector [Fx, Fy, Fz] in Newtons (shape: (3,))
+        accel: 3D acceleration vector [ax, ay, az] in m/s² (shape: (3,))
 
     Notes:
-        - Returns zero force if distance < minimum threshold (avoid singularity)
+        - Returns zero if distance < minimum threshold (avoid singularity)
         - Minimum distance threshold: 1e10 meters (~0.001 light-years)
+        - Mass of particle i does NOT affect its acceleration (equivalence principle)
     """
     # Vector from i to j
     r_vec = pos_j - pos_i
@@ -134,22 +135,22 @@ def gravitational_force_direct(pos_i, pos_j, mass_j, velocity_j, use_relativisti
     else:
         m_eff = mass_j
 
-    # Gravitational force magnitude: F = G × M / r²
-    force_magnitude = const.G * m_eff / r_squared
+    # Gravitational acceleration magnitude: a = G × M / r²
+    accel_magnitude = const.G * m_eff / r_squared
 
-    # Force vector: F_vec = F_mag × r_hat = F_mag × (r_vec / r)
-    force = force_magnitude * (r_vec / r)
+    # Acceleration vector: a_vec = a_mag × r_hat = a_mag × (r_vec / r)
+    accel = accel_magnitude * (r_vec / r)
 
-    return force
+    return accel
 
 
 @jit(nopython=True)
 def calculate_acceleration_from_bhs(pos, bh_positions, bh_masses_rest,
-                                   bh_velocities, bh_is_static, use_relativistic):
+                                    bh_velocities, bh_is_static, use_relativistic):
     """
-    Calculate gravitational acceleration on a particle from all black holes.
+    Calculate total gravitational acceleration on a particle from all black holes.
 
-    This is the main force calculation function for debris particles.
+    This is the main acceleration calculation function for debris particles.
 
     Args:
         pos: Position of particle [x, y, z] in meters (shape: (3,))
@@ -160,14 +161,18 @@ def calculate_acceleration_from_bhs(pos, bh_positions, bh_masses_rest,
         use_relativistic: Whether to use relativistic mass
 
     Returns:
-        acceleration: 3D acceleration vector [ax, ay, az] in m/s² (shape: (3,))
+        accel: 3D acceleration vector [ax, ay, az] in m/s² (shape: (3,))
+
+    Notes:
+        - This function accumulates accelerations from all black holes
+        - Particle mass does NOT affect acceleration (equivalence principle)
     """
-    accel = np.zeros(3)
+    accel_total = np.zeros(3)
     n_bh = len(bh_positions)
 
     for j in range(n_bh):
-        # Calculate force from BH j
-        force = gravitational_force_direct(
+        # Calculate acceleration from BH j
+        accel = gravitational_acceleration_direct(
             pos,
             bh_positions[j],
             bh_masses_rest[j],
@@ -175,14 +180,9 @@ def calculate_acceleration_from_bhs(pos, bh_positions, bh_masses_rest,
             use_relativistic and not bh_is_static[j]
         )
 
-        # Note: F = m × a, so a = F / m
-        # But for gravitational acceleration, we typically don't divide by mass
-        # because we're calculating the acceleration field, not particle-specific force
-        # Actually, for this simulation we want acceleration, so we'll return force/mass later
-        # For now, accumulate force
-        accel += force
+        accel_total += accel
 
-    return accel
+    return accel_total
 
 
 @jit(nopython=True, parallel=True)
@@ -221,7 +221,7 @@ def update_particle_velocities_and_positions(
 
     for i in range(n_particles):
         # Calculate acceleration at current position
-        force = calculate_acceleration_from_bhs(
+        accel = calculate_acceleration_from_bhs(
             positions[i],
             bh_positions,
             bh_masses_rest,
@@ -230,17 +230,14 @@ def update_particle_velocities_and_positions(
             use_relativistic
         )
 
-        # Convert force to acceleration: a = F / m
-        accel = force / particle_masses[i]
-
-        # Update velocity: v_new = v + a × dt
+        # Update velocity: v_new = v + a * dt
         velocities[i] += accel * dt
 
-        # Update position: x_new = x + v × dt
+        # Update position: x_new = x + v * dt
         # (Using updated velocity - semi-implicit Euler)
         positions[i] += velocities[i] * dt
 
-        # Update proper time with time dilation: dτ = dt / γ
+        # Update proper time with time dilation: dtau = dt / gamma
         gamma = lorentz_factor(velocities[i])
         proper_times[i] += dt / gamma
 
