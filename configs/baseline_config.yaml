@@ -62,8 +62,7 @@ simulation_control:
 # Physics options
 physics_options:
   force_method: "direct"  # "direct" or "barnes_hut"
-  include_debris_gravity: false  # Phase 1: off, Phase 2: on
-  use_relativistic_mass: true
+  use_newtonian_enhancements: false
   barnes_hut:
     opening_angle_theta: 0.5
     max_particles_per_leaf: 8

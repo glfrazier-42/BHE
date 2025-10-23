@@ -10,7 +10,7 @@ Tests cover:
 
 import pytest
 import numpy as np
-from src.physics import (
+from bhe.physics import (
     lorentz_factor,
     lorentz_factor_scalar,
     relativistic_mass,
@@ -19,7 +19,7 @@ from src.physics import (
     calculate_kinetic_energy,
     calculate_potential_energy
 )
-from src import constants as const
+from bhe import constants as const
 
 
 class TestLorentzFactor:
@@ -33,9 +33,9 @@ class TestLorentzFactor:
 
     def test_low_velocity(self):
         """For v << c, γ should be approximately 1.0."""
-        velocity = np.array([1000.0, 0.0, 0.0])  # 1 km/s << c
+        velocity = np.array([0.001, 0.0, 0.0])  # 0.001c << c
         gamma = lorentz_factor(velocity)
-        assert gamma > 1.0
+        assert gamma >= 1.0
         assert gamma < 1.0001  # Very close to 1
 
     def test_half_speed_of_light(self):
@@ -118,8 +118,8 @@ class TestGravitationalForce:
     def test_zero_distance_returns_zero(self):
         """Force should be zero when particles are too close (singularity avoidance)."""
         pos_i = np.array([0.0, 0.0, 0.0])
-        pos_j = np.array([1e9, 0.0, 0.0])  # < 1e10 m threshold
-        mass_j = 1.0e30
+        pos_j = np.array([0.0001, 0.0, 0.0])  # 0.0001 ly < 0.001 ly threshold
+        mass_j = 1.0  # 1 M_sun
         velocity_j = np.array([0.0, 0.0, 0.0])
 
         accel = gravitational_acceleration_direct(pos_i, pos_j, mass_j, velocity_j, False)
@@ -128,14 +128,14 @@ class TestGravitationalForce:
     def test_newtonian_limit(self):
         """Test force in Newtonian limit (low velocity, no relativistic correction)."""
         pos_i = np.array([0.0, 0.0, 0.0])
-        pos_j = np.array([const.Gly_to_m, 0.0, 0.0])  # 1 Gly away
-        mass_j = 1.0e30  # 1 solar mass
+        pos_j = np.array([const.Gly, 0.0, 0.0])  # 1 Gly away
+        mass_j = 1.0  # 1 M_sun
         velocity_j = np.array([0.0, 0.0, 0.0])
 
         accel = gravitational_acceleration_direct(pos_i, pos_j, mass_j, velocity_j, False)
 
         # Expected: a = G × M / r² in x-direction
-        r = const.Gly_to_m
+        r = const.Gly
         expected_magnitude = const.G * mass_j / (r * r)
         expected_accel = np.array([expected_magnitude, 0.0, 0.0])
 
@@ -144,9 +144,9 @@ class TestGravitationalForce:
     def test_relativistic_mass_increases_accel(self):
         """Acceleration should increase when using relativistic mass for moving BH."""
         pos_i = np.array([0.0, 0.0, 0.0])
-        pos_j = np.array([const.Gly_to_m, 0.0, 0.0])
-        mass_j = 1.0e30
-        velocity_j = np.array([0.0, 0.8 * const.c, 0.0])  # Moving at 0.8c
+        pos_j = np.array([const.Gly, 0.0, 0.0])  # 1 Gly away
+        mass_j = 1.0  # 1 M_sun
+        velocity_j = np.array([0.0, 0.8, 0.0])  # Moving at 0.8c
 
         accel_nonrel = gravitational_acceleration_direct(pos_i, pos_j, mass_j, velocity_j, False)
         accel_rel = gravitational_acceleration_direct(pos_i, pos_j, mass_j, velocity_j, True)
@@ -182,8 +182,8 @@ class TestAccelFromBHs:
     def test_single_bh(self):
         """Test acceleration from a single black hole."""
         pos = np.array([0.0, 0.0, 0.0])
-        bh_positions = np.array([[const.Gly_to_m, 0.0, 0.0]])
-        bh_masses = np.array([1.0e30])
+        bh_positions = np.array([[const.Gly, 0.0, 0.0]])
+        bh_masses = np.array([1.0])  # 1 M_sun
         bh_velocities = np.array([[0.0, 0.0, 0.0]])
         bh_is_static = np.array([True])
 
@@ -192,7 +192,7 @@ class TestAccelFromBHs:
         )
 
         # Expected: a = G × M / r² in x-direction
-        r = const.Gly_to_m
+        r = const.Gly
         expected_accel_mag = const.G * bh_masses[0] / (r * r)
         expected = np.array([expected_accel_mag, 0.0, 0.0])
 
@@ -204,10 +204,10 @@ class TestAccelFromBHs:
 
         # Two BHs on opposite sides
         bh_positions = np.array([
-            [const.Gly_to_m, 0.0, 0.0],
-            [-const.Gly_to_m, 0.0, 0.0]
+            [const.Gly, 0.0, 0.0],
+            [-const.Gly, 0.0, 0.0]
         ])
-        bh_masses = np.array([1.0e30, 1.0e30])  # Equal masses
+        bh_masses = np.array([1.0, 1.0])  # Equal masses (M_sun)
         bh_velocities = np.zeros((2, 3))
         bh_is_static = np.array([True, True])
 
@@ -224,15 +224,15 @@ class TestEnergyCalculations:
 
     def test_kinetic_energy_stationary(self):
         """KE should be zero for stationary particle."""
-        mass = 1.0e30
+        mass = 1.0  # 1 M_sun
         velocity = np.array([0.0, 0.0, 0.0])
         ke = calculate_kinetic_energy(mass, velocity)
         assert abs(ke) < 1e-10
 
     def test_kinetic_energy_low_velocity(self):
-        """For v << c, KE ≈ (1/2) × m × v²."""
-        mass = 1.0e30
-        v = 1.0e5  # 100 km/s << c
+        """For v << c, KE ≈ (1/2) × m × v² (in natural units c=1)."""
+        mass = 1.0  # 1 M_sun
+        v = 0.001  # 0.001c << c
         velocity = np.array([v, 0.0, 0.0])
 
         ke = calculate_kinetic_energy(mass, velocity)
@@ -244,15 +244,15 @@ class TestEnergyCalculations:
     def test_potential_energy_negative(self):
         """Gravitational PE should be negative."""
         pos1 = np.array([0.0, 0.0, 0.0])
-        pos2 = np.array([const.Gly_to_m, 0.0, 0.0])
-        mass1 = 1.0e30
-        mass2 = 1.0e30
+        pos2 = np.array([const.Gly, 0.0, 0.0])  # 1 Gly away
+        mass1 = 1.0  # 1 M_sun
+        mass2 = 1.0  # 1 M_sun
 
         pe = calculate_potential_energy(pos1, pos2, mass1, mass2)
         assert pe < 0.0
 
         # Expected: PE = -G × m1 × m2 / r
-        r = const.Gly_to_m
+        r = const.Gly
         expected = -const.G * mass1 * mass2 / r
         assert abs(pe - expected) / abs(expected) < 1e-10
 

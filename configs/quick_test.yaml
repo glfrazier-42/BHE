@@ -1,0 +1,70 @@
+# Quick test simulation: 100 particles, 100 timesteps for diagnostics
+simulation_name: "quick_diagnostic_test"
+output_directory: "./results/test"
+
+# Central black hole that explodes
+central_black_hole:
+  mass_solar_masses: 4.0e+22  # ~200% visible universe mass
+
+# Ring 0: The Tugboats - disabled for baseline
+ring_0:
+  count: 0
+  radius_gly: 14.0
+  mass_per_bh_solar_masses: 1.0e+21
+  velocity_mode: "keplerian"
+  capture_radius_gly: 0.5
+
+# Ring 1: Inner shell
+ring_1:
+  count: 4
+  radius_gly: 100.0
+  mass_per_bh_solar_masses: 5.0e+21
+  velocity_mode: "keplerian"
+  is_static: false
+
+# Ring 2: Middle shell
+ring_2:
+  count: 6
+  radius_gly: 150.0
+  mass_per_bh_solar_masses: 1.0e+22
+  velocity_mode: "keplerian"
+  is_static: false
+
+# Ring 3: Outer shell
+ring_3:
+  count: 8
+  radius_gly: 200.0
+  mass_per_bh_solar_masses: 1.5e+22
+  velocity_mode: "keplerian"
+  is_static: false
+
+# Debris field parameters - REDUCED FOR TESTING
+debris_field:
+  particle_count: 100  # Reduced from 1000
+  position_min_gly: 0.01
+  position_max_gly: 0.1
+  velocity_min_fraction_c: 0.01
+  velocity_max_fraction_c: 0.92
+  distribution: "uniform"
+
+# Simulation control - SHORT TEST RUN
+simulation_control:
+  timestep_gyr: 0.001
+  duration_gyr: 0.1  # Only 0.1 Gyr = 100 timesteps
+  output_interval_gyr: 0.01  # Save every 10 timesteps
+  checkpoint_interval_gyr: 5.0
+
+# Physics options
+physics_options:
+  force_method: "direct"
+  use_newtonian_enhancements: false
+  barnes_hut:
+    opening_angle_theta: 0.5
+    max_particles_per_leaf: 8
+    tree_rebuild_interval: 10
+
+# Logging and diagnostics
+diagnostics:
+  check_energy_conservation: true
+  check_momentum_conservation: true
+  log_level: "INFO"

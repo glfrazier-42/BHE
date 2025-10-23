@@ -9,7 +9,7 @@ import tempfile
 import os
 from pathlib import Path
 
-from src.analysis import (
+from bhe.analysis import (
     calculate_redshift,
     calculate_redshift_array,
     analyze_simulation,
@@ -17,7 +17,7 @@ from src.analysis import (
     get_final_debris_state,
     get_ring0_trajectories
 )
-from src import constants as const
+from bhe import constants as const
 
 
 class TestRedshiftCalculation:
@@ -31,12 +31,12 @@ class TestRedshiftCalculation:
 
     def test_low_velocity_classical_limit(self):
         """For v << c, z ≈ v/c (classical Doppler)."""
-        v = 1.0e5  # 100 km/s << c
+        v = 0.001  # 0.001c << c (natural units: velocities in units of c)
         velocity = np.array([v, 0.0, 0.0])
         z = calculate_redshift(velocity)
 
-        # Classical approximation
-        z_classical = v / const.c
+        # Classical approximation (v already in units of c, so z_classical ≈ v)
+        z_classical = v
 
         # Should be very close at low velocities
         assert abs(z - z_classical) / z_classical < 0.01  # Within 1%
@@ -99,43 +99,54 @@ class TestAnalyzeSimulation:
 
     @pytest.fixture
     def mock_hdf5_file(self):
-        """Create a mock HDF5 file with simulation data."""
+        """Create a mock HDF5 file with simulation data (unified particle system, natural units)."""
         tmpdir = tempfile.mkdtemp()
         filepath = os.path.join(tmpdir, "test_sim.h5")
 
         with h5py.File(filepath, 'w') as f:
+            from bhe.state import DEBRIS, BLACK_HOLE
+
             # Create timeseries group
             ts = f.create_group('timeseries')
 
-            # Create simple test data (3 timesteps, 10 particles)
+            # Create simple test data (3 timesteps, 10 debris particles)
             n_steps = 3
-            n_debris = 10
+            n_total = 10  # All debris for simplicity
 
-            times = np.array([0.0, 1e12, 2e12])  # seconds
+            times = np.array([0.0, 1e12, 2e12])  # years
             ts.create_dataset('time', data=times)
 
-            # Debris positions - some far away, some close
-            positions = np.zeros((n_steps, n_debris, 3))
+            # Unified positions (natural units: ly) - some far away, some close
+            positions = np.zeros((n_steps, n_total, 3))
             # Last timestep: half beyond 100 Gly, half close
             for i in range(5):
-                positions[-1, i] = [(i + 1) * 150e9 * const.Gly_to_m / 150, 0, 0]  # Beyond 100 Gly
+                positions[-1, i] = [(i + 1) * 150.0e9, 0, 0]  # Beyond 100 Gly (in ly)
             for i in range(5, 10):
-                positions[-1, i] = [(i + 1) * 10e9 * const.Gly_to_m / 10, 0, 0]  # Within 100 Gly
-            ts.create_dataset('debris_positions', data=positions)
+                positions[-1, i] = [(i + 1) * 10.0e9, 0, 0]  # Within 100 Gly (in ly)
+            ts.create_dataset('positions', data=positions)
 
-            # Velocities
-            velocities = np.zeros((n_steps, n_debris, 3))
-            velocities[-1, :, 0] = 0.5 * const.c  # All moving at 0.5c in x direction
-            ts.create_dataset('debris_velocities', data=velocities)
+            # Unified velocities (natural units: fraction of c)
+            velocities = np.zeros((n_steps, n_total, 3))
+            velocities[-1, :, 0] = 0.5  # All moving at 0.5c in x direction
+            ts.create_dataset('velocities', data=velocities)
 
-            # Proper times
-            proper_times = np.ones((n_steps, n_debris)) * 1e12  # 1e12 seconds
-            ts.create_dataset('debris_proper_times', data=proper_times)
+            # Unified masses (natural units: M_sun)
+            masses = np.ones((n_steps, n_total))
+            ts.create_dataset('masses', data=masses)
+
+            # Proper times (years)
+            proper_times = np.ones((n_steps, n_total)) * 1e12
+            ts.create_dataset('proper_times', data=proper_times)
 
             # Accretion flags - mark 3 as accreted
-            accreted = np.zeros((n_steps, n_debris), dtype=bool)
+            accreted = np.zeros((n_steps, n_total), dtype=bool)
             accreted[-1, 0:3] = True
-            ts.create_dataset('debris_accreted', data=accreted)
+            ts.create_dataset('accreted', data=accreted)
+
+            # Metadata (all debris particles)
+            meta = f.create_group('metadata')
+            meta.create_dataset('particle_type', data=np.full(n_total, DEBRIS))
+            meta.create_dataset('ring_id', data=np.full(n_total, -1))
 
             # Create conservation group
             cons = f.create_group('conservation')
@@ -198,33 +209,40 @@ class TestEscapeFraction:
 
     @pytest.fixture
     def escape_test_file(self):
-        """Create HDF5 file for escape fraction testing."""
+        """Create HDF5 file for escape fraction testing (unified particle system, natural units)."""
         tmpdir = tempfile.mkdtemp()
         filepath = os.path.join(tmpdir, "escape_test.h5")
 
         with h5py.File(filepath, 'w') as f:
+            from bhe.state import DEBRIS
+
             ts = f.create_group('timeseries')
 
             # Create 5 timesteps, 4 particles
             n_steps = 5
-            n_debris = 4
+            n_total = 4
 
-            times = np.linspace(0, 4e12, n_steps)
+            times = np.linspace(0, 4e12, n_steps)  # years
             ts.create_dataset('time', data=times)
 
-            # Particles gradually move outward
-            positions = np.zeros((n_steps, n_debris, 3))
+            # Particles gradually move outward (natural units: ly)
+            positions = np.zeros((n_steps, n_total, 3))
             for i in range(n_steps):
                 # Each particle moves outward at different rate
-                for j in range(n_debris):
-                    distance = (j + 1) * 30e9 * const.Gly_to_m * (i + 1) / n_steps
+                for j in range(n_total):
+                    distance = (j + 1) * 30.0e9 * (i + 1) / n_steps  # ly
                     positions[i, j] = [distance, 0, 0]
 
-            ts.create_dataset('debris_positions', data=positions)
+            ts.create_dataset('positions', data=positions)
 
             # No accretion
-            accreted = np.zeros((n_steps, n_debris), dtype=bool)
-            ts.create_dataset('debris_accreted', data=accreted)
+            accreted = np.zeros((n_steps, n_total), dtype=bool)
+            ts.create_dataset('accreted', data=accreted)
+
+            # Metadata (all debris particles)
+            meta = f.create_group('metadata')
+            meta.create_dataset('particle_type', data=np.full(n_total, DEBRIS))
+            meta.create_dataset('ring_id', data=np.full(n_total, -1))
 
         yield filepath
 
@@ -256,36 +274,43 @@ class TestRing0Trajectories:
 
     @pytest.fixture
     def ring0_test_file(self):
-        """Create HDF5 file with Ring 0 data."""
+        """Create HDF5 file with Ring 0 data (unified particle system, natural units)."""
         tmpdir = tempfile.mkdtemp()
         filepath = os.path.join(tmpdir, "ring0_test.h5")
 
         with h5py.File(filepath, 'w') as f:
+            from bhe.state import BLACK_HOLE
+
             # Add config group
             f.create_group('config')
 
             ts = f.create_group('timeseries')
 
-            # Create 3 timesteps, 2 BHs
+            # Create 3 timesteps, 2 BHs (unified particle system)
             n_steps = 3
-            n_bh = 2
+            n_total = 2  # 2 BHs
 
-            times = np.array([0.0, 1e12, 2e12])
+            times = np.array([0.0, 1e12, 2e12])  # years
             ts.create_dataset('time', data=times)
 
-            # BH positions in circular orbits
-            positions = np.zeros((n_steps, n_bh, 3))
-            radius = 3e9 * const.Gly_to_m
+            # Unified positions in circular orbits (natural units: ly)
+            positions = np.zeros((n_steps, n_total, 3))
+            radius = 3.0e9  # 3 Gly in ly
             for i in range(n_steps):
                 angle = i * np.pi / 4
                 positions[i, 0] = [radius * np.cos(angle), radius * np.sin(angle), 0]
                 positions[i, 1] = [-radius * np.cos(angle), -radius * np.sin(angle), 0]
 
-            ts.create_dataset('bh_positions', data=positions)
+            ts.create_dataset('positions', data=positions)
 
-            # BH velocities
-            velocities = np.zeros((n_steps, n_bh, 3))
-            ts.create_dataset('bh_velocities', data=velocities)
+            # Unified velocities (natural units: fraction of c)
+            velocities = np.zeros((n_steps, n_total, 3))
+            ts.create_dataset('velocities', data=velocities)
+
+            # Metadata (all BH particles, Ring 0)
+            meta = f.create_group('metadata')
+            meta.create_dataset('particle_type', data=np.full(n_total, BLACK_HOLE))
+            meta.create_dataset('ring_id', data=np.zeros(n_total, dtype=int))  # Ring 0
 
         yield filepath
 
@@ -300,12 +325,12 @@ class TestRing0Trajectories:
         assert 'times' in trajectories
         assert 'positions' in trajectories
         assert 'velocities' in trajectories
-        assert 'n_bh' in trajectories
+        assert 'n_ring0' in trajectories
 
         # Check shapes
         assert len(trajectories['times']) == 3
         assert trajectories['positions'].shape == (3, 2, 3)
-        assert trajectories['n_bh'] == 2
+        assert trajectories['n_ring0'] == 2
 
     def test_no_bh_data_returns_none(self):
         """Test that missing BH data returns None."""

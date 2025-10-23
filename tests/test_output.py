@@ -9,15 +9,15 @@ import tempfile
 import os
 from pathlib import Path
 
-from src.config import SimulationParameters
-from src.state import SimulationState
-from src.output import (
+from bhe.config import SimulationParameters
+from bhe.state import SimulationState
+from bhe.output import (
     SimulationRecorder,
     calculate_total_energy,
     calculate_total_momentum,
     load_checkpoint
 )
-from src import constants as const
+from bhe import constants as const
 
 
 @pytest.fixture
@@ -36,47 +36,53 @@ def simple_params():
     return params
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def simple_state():
-    """Create simple simulation state for testing."""
-    # Create state with proper constructor
-    n_debris = 3
-    n_bh = 2
-    M_central = 4e22 * const.M_sun
+    """Create simple simulation state for testing (unified particle system, natural units)."""
+    n_total = 5  # 2 BHs + 3 debris
+    M_central = 4e22  # M_sun (natural units)
 
-    state = SimulationState(n_bh=n_bh, n_debris=n_debris, M_central=M_central)
+    from bhe.state import BLACK_HOLE, DEBRIS
 
-    # Fill in debris data
-    state.debris_positions[0] = [1e24, 0.0, 0.0]
-    state.debris_positions[1] = [0.0, 1e24, 0.0]
-    state.debris_positions[2] = [0.0, 0.0, 1e24]
+    state = SimulationState(n_total=n_total, M_central=M_central)
 
-    state.debris_velocities[0] = [1e5, 0.0, 0.0]
-    state.debris_velocities[1] = [0.0, 1e5, 0.0]
-    state.debris_velocities[2] = [0.0, 0.0, 1e5]
+    # Manually set particle types (first 2 are BHs, last 3 are debris)
+    state.particle_type[0] = BLACK_HOLE
+    state.particle_type[1] = BLACK_HOLE
+    state.particle_type[2] = DEBRIS
+    state.particle_type[3] = DEBRIS
+    state.particle_type[4] = DEBRIS
 
-    state.debris_masses[0] = 1e30
-    state.debris_masses[1] = 2e30
-    state.debris_masses[2] = 3e30
+    # Fill in positions (natural units: ly)
+    state.positions[0] = [0.0, 0.0, 0.0]  # BH
+    state.positions[1] = [2.0e9, 0.0, 0.0]  # BH at 2 Gly
+    state.positions[2] = [1.0e9, 0.0, 0.0]  # Debris at 1 Gly
+    state.positions[3] = [0.0, 1.0e9, 0.0]  # Debris at 1 Gly
+    state.positions[4] = [0.0, 0.0, 1.0e9]  # Debris at 1 Gly
 
-    # Fill in BH data
-    state.bh_positions[0] = [0.0, 0.0, 0.0]
-    state.bh_positions[1] = [2e24, 0.0, 0.0]
+    # Fill in velocities (natural units: fraction of c)
+    state.velocities[0] = [0.0, 0.0, 0.0]
+    state.velocities[1] = [0.0, 0.0002, 0.0]  # ~200 km/s
+    state.velocities[2] = [0.0001, 0.0, 0.0]  # ~100 km/s
+    state.velocities[3] = [0.0, 0.0001, 0.0]
+    state.velocities[4] = [0.0, 0.0, 0.0001]
 
-    state.bh_velocities[0] = [0.0, 0.0, 0.0]
-    state.bh_velocities[1] = [0.0, 2e8, 0.0]
+    # Fill in masses (natural units: M_sun)
+    state.masses[0] = 4e22  # Large BH
+    state.masses[1] = 1e10  # Large BH
+    state.masses[2] = 1.0
+    state.masses[3] = 2.0
+    state.masses[4] = 3.0
 
-    state.bh_masses[0] = 4e22 * const.M_sun
-    state.bh_masses[1] = 1e10 * const.M_sun
+    # Fill in metadata
+    state.ring_id[0] = 0
+    state.ring_id[1] = 0
+    state.ring_id[2] = -1
+    state.ring_id[3] = -1
+    state.ring_id[4] = -1
 
-    state.bh_ring_ids[0] = 0
-    state.bh_ring_ids[1] = 0
-
-    state.bh_is_static[0] = True
-    state.bh_is_static[1] = False
-
-    state.bh_capture_radii[0] = 0.0
-    state.bh_capture_radii[1] = 1e22
+    state.capture_radius[0] = 0.0
+    state.capture_radius[1] = 1.0e9  # 1 Gly in natural units
 
     return state
 
@@ -85,16 +91,12 @@ class TestEnergyCalculation:
     """Test energy conservation calculation."""
 
     def test_kinetic_energy_non_relativistic(self, simple_state):
-        """Test kinetic energy calculation in non-relativistic regime."""
+        """Test kinetic energy calculation (unified particle system)."""
         energy = calculate_total_energy(
-            simple_state.debris_positions,
-            simple_state.debris_velocities,
-            simple_state.debris_masses,
-            simple_state.debris_accreted,
-            simple_state.bh_positions,
-            simple_state.bh_velocities,
-            simple_state.bh_masses,
-            use_relativistic=False
+            simple_state.positions,
+            simple_state.velocities,
+            simple_state.masses,
+            simple_state.accreted
         )
 
         # Energy should be finite and non-zero
@@ -104,17 +106,13 @@ class TestEnergyCalculation:
     def test_energy_with_accreted_particles(self, simple_state):
         """Test that accreted particles don't contribute to energy."""
         # Mark one particle as accreted
-        simple_state.debris_accreted[0] = True
+        simple_state.accreted[0] = True
 
         energy_with_accreted = calculate_total_energy(
-            simple_state.debris_positions,
-            simple_state.debris_velocities,
-            simple_state.debris_masses,
-            simple_state.debris_accreted,
-            simple_state.bh_positions,
-            simple_state.bh_velocities,
-            simple_state.bh_masses,
-            use_relativistic=False
+            simple_state.positions,
+            simple_state.velocities,
+            simple_state.masses,
+            simple_state.accreted
         )
 
         # Should still be finite
@@ -125,13 +123,11 @@ class TestMomentumCalculation:
     """Test momentum conservation calculation."""
 
     def test_momentum_calculation(self, simple_state):
-        """Test momentum calculation returns 3D vector."""
+        """Test momentum calculation returns 3D vector (unified particle system)."""
         momentum = calculate_total_momentum(
-            simple_state.debris_velocities,
-            simple_state.debris_masses,
-            simple_state.debris_accreted,
-            simple_state.bh_velocities,
-            simple_state.bh_masses
+            simple_state.velocities,
+            simple_state.masses,
+            simple_state.accreted
         )
 
         # Should be 3D vector
@@ -142,26 +138,22 @@ class TestMomentumCalculation:
         """Test that accreted particles don't contribute to momentum."""
         # Calculate momentum before accretion
         momentum_before = calculate_total_momentum(
-            simple_state.debris_velocities,
-            simple_state.debris_masses,
-            simple_state.debris_accreted,
-            simple_state.bh_velocities,
-            simple_state.bh_masses
+            simple_state.velocities,
+            simple_state.masses,
+            simple_state.accreted
         )
 
-        # Mark one particle as accreted
-        simple_state.debris_accreted[0] = True
+        # Mark particle with non-zero velocity as accreted (particle 1 has velocity [0, 0.0002, 0])
+        simple_state.accreted[1] = True
 
         # Calculate momentum after accretion
         momentum_after = calculate_total_momentum(
-            simple_state.debris_velocities,
-            simple_state.debris_masses,
-            simple_state.debris_accreted,
-            simple_state.bh_velocities,
-            simple_state.bh_masses
+            simple_state.velocities,
+            simple_state.masses,
+            simple_state.accreted
         )
 
-        # Momentum should decrease (one particle excluded)
+        # Momentum should change (one particle with nonzero velocity excluded)
         assert not np.allclose(momentum_before, momentum_after)
 
 
@@ -184,14 +176,19 @@ class TestSimulationRecorder:
                     assert 'conservation' in f
                     assert 'checkpoints' in f
 
-                    # Check timeseries datasets
+                    # Check timeseries datasets (unified particle system)
                     assert 'time' in f['timeseries']
                     assert 'timestep' in f['timeseries']
-                    assert 'debris_positions' in f['timeseries']
-                    assert 'debris_velocities' in f['timeseries']
-                    assert 'debris_accreted' in f['timeseries']
-                    assert 'bh_positions' in f['timeseries']
-                    assert 'bh_velocities' in f['timeseries']
+                    assert 'positions' in f['timeseries']
+                    assert 'velocities' in f['timeseries']
+                    assert 'masses' in f['timeseries']
+                    assert 'accreted' in f['timeseries']
+                    assert 'proper_times' in f['timeseries']
+
+                    # Check metadata
+                    assert 'metadata' in f
+                    assert 'particle_type' in f['metadata']
+                    assert 'ring_id' in f['metadata']
 
                     # Check conservation datasets
                     assert 'total_energy' in f['conservation']
@@ -237,17 +234,19 @@ class TestSimulationRecorder:
                 # Save checkpoint
                 recorder.save_checkpoint(simple_state, "test_checkpoint")
 
-            # Check checkpoint was saved
-            with h5py.File(filepath, 'r') as f:
-                assert 'checkpoints/test_checkpoint' in f
+            # Check checkpoint was saved as separate file
+            checkpoint_file = os.path.join(tmpdir, "test_checkpoint.h5")
+            assert os.path.exists(checkpoint_file)
 
-                cp = f['checkpoints/test_checkpoint']
-                assert 'time' in cp.attrs
-                assert 'timestep_count' in cp.attrs
-                assert 'debris_positions' in cp
-                assert 'debris_velocities' in cp
-                assert 'bh_positions' in cp
-                assert 'bh_velocities' in cp
+            # Check checkpoint structure (SimulationState HDF5 format)
+            with h5py.File(checkpoint_file, 'r') as f:
+                assert 'time' in f.attrs
+                assert 'timestep_count' in f.attrs
+                assert 'physics' in f
+                assert 'positions' in f['physics']
+                assert 'velocities' in f['physics']
+                assert 'masses' in f['physics']
+                assert 'metadata' in f
 
 
 class TestCheckpointLoading:
@@ -258,9 +257,9 @@ class TestCheckpointLoading:
         with tempfile.TemporaryDirectory() as tmpdir:
             filepath = os.path.join(tmpdir, "test_sim.h5")
 
-            # Save original state
+            # Save original state (unified particle system)
             original_time = simple_state.time
-            original_positions = simple_state.debris_positions.copy()
+            original_positions = simple_state.positions.copy()
 
             # Create recorder and save checkpoint
             with SimulationRecorder(filepath, simple_params, simple_state) as recorder:
@@ -268,14 +267,15 @@ class TestCheckpointLoading:
 
             # Modify state
             simple_state.time += 1000.0
-            simple_state.debris_positions += 1e20
+            simple_state.positions += 1e20
 
-            # Load checkpoint
-            loaded_state = load_checkpoint(filepath, "test_checkpoint")
+            # Load checkpoint from separate file
+            checkpoint_file = os.path.join(tmpdir, "test_checkpoint.h5")
+            loaded_state = load_checkpoint(checkpoint_file)
 
             # Check state was restored
             assert loaded_state.time == original_time
-            assert np.allclose(loaded_state.debris_positions, original_positions)
+            assert np.allclose(loaded_state.positions, original_positions)
 
     def test_load_nonexistent_checkpoint(self, simple_params, simple_state):
         """Test that loading nonexistent checkpoint raises error."""
@@ -286,9 +286,10 @@ class TestCheckpointLoading:
             with SimulationRecorder(filepath, simple_params, simple_state) as recorder:
                 pass
 
-            # Try to load nonexistent checkpoint
-            with pytest.raises(KeyError):
-                load_checkpoint(filepath, "nonexistent_checkpoint")
+            # Try to load nonexistent checkpoint file
+            nonexistent_file = os.path.join(tmpdir, "nonexistent_checkpoint.h5")
+            with pytest.raises(FileNotFoundError):
+                load_checkpoint(nonexistent_file)
 
 
 class TestConservationWarnings:
@@ -317,9 +318,12 @@ class TestConservationWarnings:
                 assert 'conservation/energy_error' in f
                 assert 'conservation/momentum_error' in f
 
-                # Energy error at t=0 should be zero (initial state)
-                assert f['conservation/energy_error'][0] == 0.0
-                assert f['conservation/momentum_error'][0] == 0.0
+                # Energy error at idx=0 is NaN (no baseline yet), idx=1 establishes baseline
+                assert np.isnan(f['conservation/energy_error'][0])
+                assert np.isnan(f['conservation/momentum_error'][0])
+                # At idx=1, baseline is established, so error should be 0.0
+                assert f['conservation/energy_error'][1] == 0.0
+                assert f['conservation/momentum_error'][1] == 0.0
 
 
 class TestDataCompression:
@@ -333,11 +337,11 @@ class TestDataCompression:
             with SimulationRecorder(filepath, simple_params, simple_state) as recorder:
                 recorder.record_timestep(simple_state, check_conservation=True)
 
-            # Check compression settings
+            # Check compression settings (unified particle system)
             with h5py.File(filepath, 'r') as f:
                 # Check a few key datasets
-                assert f['timeseries/debris_positions'].compression == 'gzip'
-                assert f['timeseries/debris_velocities'].compression == 'gzip'
+                assert f['timeseries/positions'].compression == 'gzip'
+                assert f['timeseries/velocities'].compression == 'gzip'
                 assert f['conservation/total_energy'].compression == 'gzip'
 
 

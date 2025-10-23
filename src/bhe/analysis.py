@@ -15,7 +15,7 @@ import h5py
 from typing import Dict, Tuple, Optional
 from pathlib import Path
 
-from . import constants as const
+from bhe import constants as const
 
 
 def calculate_redshift(velocity: np.ndarray) -> float:
@@ -28,7 +28,7 @@ def calculate_redshift(velocity: np.ndarray) -> float:
     where beta = |v| / c
 
     Args:
-        velocity: 3D velocity vector [vx, vy, vz] in m/s (shape: (3,))
+        velocity: 3D velocity vector [vx, vy, vz] in units of c (shape: (3,))
 
     Returns:
         float: Redshift z (dimensionless)
@@ -39,11 +39,8 @@ def calculate_redshift(velocity: np.ndarray) -> float:
         - For approaching (v < 0): z < 0 (blueshift)
         - For receding (v > 0): z > 0 (redshift)
     """
-    # Calculate velocity magnitude
-    v_mag = np.sqrt(np.sum(velocity**2))
-
-    # Calculate beta = v/c
-    beta = v_mag / const.c
+    # Calculate velocity magnitude (already in units of c, so beta = v_mag)
+    beta = np.sqrt(np.sum(velocity**2))
 
     # Clamp to avoid numerical issues at v ≈ c
     if beta >= 0.9999:
@@ -60,16 +57,13 @@ def calculate_redshift_array(velocities: np.ndarray) -> np.ndarray:
     Calculate redshift for an array of velocity vectors.
 
     Args:
-        velocities: Array of velocity vectors (N, 3) in m/s
+        velocities: Array of velocity vectors (N, 3) in units of c
 
     Returns:
         Array of redshifts (N,)
     """
-    # Calculate velocity magnitudes
-    v_mags = np.sqrt(np.sum(velocities**2, axis=1))
-
-    # Calculate beta = v/c
-    betas = v_mags / const.c
+    # Calculate velocity magnitudes (already in units of c, so betas = v_mags)
+    betas = np.sqrt(np.sum(velocities**2, axis=1))
 
     # Clamp to avoid numerical issues
     betas = np.clip(betas, 0, 0.9999)
@@ -113,12 +107,23 @@ def analyze_simulation(hdf5_filepath: str) -> Dict:
         n_timesteps = len(f['timeseries/time'])
         final_idx = n_timesteps - 1
 
-        # Load final state
+        # Load final state (unified particle system)
         final_time = f['timeseries/time'][final_idx]
-        debris_pos = f['timeseries/debris_positions'][final_idx]
-        debris_vel = f['timeseries/debris_velocities'][final_idx]
-        debris_accreted = f['timeseries/debris_accreted'][final_idx]
-        debris_proper_times = f['timeseries/debris_proper_times'][final_idx]
+        all_positions = f['timeseries/positions'][final_idx]
+        all_velocities = f['timeseries/velocities'][final_idx]
+        all_accreted = f['timeseries/accreted'][final_idx]
+        all_proper_times = f['timeseries/proper_times'][final_idx]
+
+        # Get metadata to filter debris particles
+        from bhe.state import DEBRIS
+        particle_type = f['metadata/particle_type'][:]
+        debris_mask = (particle_type == DEBRIS)
+
+        # Extract debris data
+        debris_pos = all_positions[debris_mask]
+        debris_vel = all_velocities[debris_mask]
+        debris_accreted = all_accreted[debris_mask]
+        debris_proper_times = all_proper_times[debris_mask]
 
         # Calculate distances from origin
         distances = np.sqrt(np.sum(debris_pos**2, axis=1))
@@ -128,7 +133,7 @@ def analyze_simulation(hdf5_filepath: str) -> Dict:
         n_accreted = np.sum(debris_accreted)
 
         # Escape criterion: beyond 100 Gly and not accreted
-        escape_distance = 100.0 * const.Gly_to_m
+        escape_distance = 100.0 * const.Gly
         escaped_mask = (distances > escape_distance) & (~debris_accreted)
         n_escaped = np.sum(escaped_mask)
         escape_fraction = n_escaped / n_total if n_total > 0 else 0.0
@@ -143,13 +148,11 @@ def analyze_simulation(hdf5_filepath: str) -> Dict:
             redshift_mean = 0.0
             redshift_std = 0.0
 
-        # Proper time statistics for escaped particles
+        # Proper time statistics for escaped particles (times in yr, convert to Gyr)
         if n_escaped > 0:
             escaped_proper_times = debris_proper_times[escaped_mask]
-            proper_time_mean_s = np.mean(escaped_proper_times)
-            proper_time_std_s = np.std(escaped_proper_times)
-            proper_time_mean = proper_time_mean_s * const.s_to_Gyr
-            proper_time_std = proper_time_std_s * const.s_to_Gyr
+            proper_time_mean = np.mean(escaped_proper_times) / 1.0e9  # yr to Gyr
+            proper_time_std = np.std(escaped_proper_times) / 1.0e9  # yr to Gyr
         else:
             proper_time_mean = 0.0
             proper_time_std = 0.0
@@ -175,7 +178,7 @@ def analyze_simulation(hdf5_filepath: str) -> Dict:
         'proper_time_std_gyr': float(proper_time_std),
         'energy_conservation_error': float(energy_error),
         'momentum_conservation_error': float(momentum_error),
-        'final_time_gyr': float(final_time * const.s_to_Gyr)
+        'final_time_gyr': float(final_time / 1.0e9)  # yr to Gyr
     }
 
     return results
@@ -197,31 +200,38 @@ def calculate_escape_fraction_vs_time(
         - times: Array of times in Gyr
         - escape_fractions: Fraction of debris beyond threshold at each time
     """
-    threshold_m = distance_threshold * const.Gly_to_m
+    threshold_ly = distance_threshold * const.Gly
 
     with h5py.File(hdf5_filepath, 'r') as f:
         times = f['timeseries/time'][:]
-        debris_positions = f['timeseries/debris_positions'][:]
-        debris_accreted = f['timeseries/debris_accreted'][:]
+        all_positions = f['timeseries/positions'][:]
+        all_accreted = f['timeseries/accreted'][:]
+
+        # Get metadata to filter debris particles
+        from bhe.state import DEBRIS
+        particle_type = f['metadata/particle_type'][:]
+        debris_mask = (particle_type == DEBRIS)
 
         n_timesteps = len(times)
-        n_debris = debris_positions.shape[1]
+        n_debris = np.sum(debris_mask)
         escape_fractions = np.zeros(n_timesteps)
 
         for i in range(n_timesteps):
+            # Extract debris data at this timestep
+            debris_pos = all_positions[i][debris_mask]
+            debris_accreted_flags = all_accreted[i][debris_mask]
+
             # Calculate distances from origin
-            pos = debris_positions[i]
-            distances = np.sqrt(np.sum(pos**2, axis=1))
+            distances = np.sqrt(np.sum(debris_pos**2, axis=1))
 
             # Count escaped: beyond threshold AND not accreted
-            accreted = debris_accreted[i]
-            escaped = (distances > threshold_m) & (~accreted)
+            escaped = (distances > threshold_ly) & (~debris_accreted_flags)
             n_escaped = np.sum(escaped)
 
             escape_fractions[i] = n_escaped / n_debris if n_debris > 0 else 0.0
 
-    # Convert times to Gyr
-    times_gyr = times * const.s_to_Gyr
+    # Convert times to Gyr (times are in yr)
+    times_gyr = times / 1.0e9
 
     return times_gyr, escape_fractions
 
@@ -235,25 +245,36 @@ def get_final_debris_state(hdf5_filepath: str) -> Dict[str, np.ndarray]:
 
     Returns:
         Dictionary containing:
-        - 'positions': Positions (N, 3) in meters
-        - 'velocities': Velocities (N, 3) in m/s
-        - 'proper_times': Proper times (N,) in seconds
+        - 'positions': Positions (N, 3) in ly
+        - 'velocities': Velocities (N, 3) in units of c
+        - 'proper_times': Proper times (N,) in years
         - 'accreted': Accretion flags (N,) boolean
-        - 'distances': Distances from origin (N,) in meters
+        - 'distances': Distances from origin (N,) in ly
         - 'redshifts': Redshifts (N,) dimensionless
-        - 'time': Final simulation time in seconds
+        - 'time': Final simulation time in years
     """
     with h5py.File(hdf5_filepath, 'r') as f:
         # Get final timestep
         n_timesteps = len(f['timeseries/time'])
         final_idx = n_timesteps - 1
 
-        # Load final state
-        positions = f['timeseries/debris_positions'][final_idx]
-        velocities = f['timeseries/debris_velocities'][final_idx]
-        proper_times = f['timeseries/debris_proper_times'][final_idx]
-        accreted = f['timeseries/debris_accreted'][final_idx]
+        # Load final state (unified particle system)
+        all_positions = f['timeseries/positions'][final_idx]
+        all_velocities = f['timeseries/velocities'][final_idx]
+        all_proper_times = f['timeseries/proper_times'][final_idx]
+        all_accreted = f['timeseries/accreted'][final_idx]
         time = f['timeseries/time'][final_idx]
+
+        # Get metadata to filter debris particles
+        from bhe.state import DEBRIS
+        particle_type = f['metadata/particle_type'][:]
+        debris_mask = (particle_type == DEBRIS)
+
+        # Extract debris data
+        positions = all_positions[debris_mask]
+        velocities = all_velocities[debris_mask]
+        proper_times = all_proper_times[debris_mask]
+        accreted = all_accreted[debris_mask]
 
         # Calculate derived quantities
         distances = np.sqrt(np.sum(positions**2, axis=1))
@@ -279,41 +300,42 @@ def get_ring0_trajectories(hdf5_filepath: str) -> Optional[Dict[str, np.ndarray]
 
     Returns:
         Dictionary containing Ring 0 trajectory data, or None if no Ring 0:
-        - 'times': Times (N_timesteps,) in seconds
-        - 'positions': Positions (N_timesteps, N_ring0, 3) in meters
-        - 'velocities': Velocities (N_timesteps, N_ring0, 3) in m/s
+        - 'times': Times (N_timesteps,) in years
+        - 'positions': Positions (N_timesteps, N_ring0, 3) in ly
+        - 'velocities': Velocities (N_timesteps, N_ring0, 3) in units of c
         - 'n_ring0': Number of Ring 0 BHs
 
         Returns None if there are no Ring 0 BHs in the simulation.
     """
     with h5py.File(hdf5_filepath, 'r') as f:
-        # Check if we have Ring 0 BHs
-        # Ring 0 is typically the first N BHs in the array
-        # We need to determine which BHs are Ring 0
-        # For now, assume Ring 0 BHs have non-zero capture radius
-
-        # Get first timestep to check BH configuration
-        if 'config' not in f or 'bh_positions' not in f['timeseries']:
+        # Check if we have metadata (unified particle system)
+        if 'metadata' not in f or 'metadata/ring_id' not in f:
             return None
 
-        # Load BH data
+        # Get metadata to filter Ring 0 BHs
+        from bhe.state import BLACK_HOLE
+        particle_type = f['metadata/particle_type'][:]
+        ring_id = f['metadata/ring_id'][:]
+
+        # Ring 0 mask: black holes with ring_id == 0
+        ring0_mask = (particle_type == BLACK_HOLE) & (ring_id == 0)
+        n_ring0 = np.sum(ring0_mask)
+
+        if n_ring0 == 0:
+            return None
+
+        # Load all particle data
         times = f['timeseries/time'][:]
-        bh_positions = f['timeseries/bh_positions'][:]
-        bh_velocities = f['timeseries/bh_velocities'][:]
+        all_positions = f['timeseries/positions'][:]
+        all_velocities = f['timeseries/velocities'][:]
 
-        # Get number of BHs from first timestep
-        n_bh = bh_positions.shape[1]
-
-        if n_bh == 0:
-            return None
-
-        # For now, return all BH trajectories
-        # In a real implementation, we'd filter for Ring 0 based on ring_ids
-        # This would require storing ring_ids in the HDF5 file
+        # Extract Ring 0 trajectories (all timesteps, Ring 0 particles only)
+        ring0_positions = all_positions[:, ring0_mask, :]
+        ring0_velocities = all_velocities[:, ring0_mask, :]
 
     return {
         'times': times,
-        'positions': bh_positions,
-        'velocities': bh_velocities,
-        'n_bh': n_bh
+        'positions': ring0_positions,
+        'velocities': ring0_velocities,
+        'n_ring0': n_ring0
     }

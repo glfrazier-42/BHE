@@ -163,7 +163,98 @@ pytest>=7.3.0
 - Test coverage: 20 new tests (12 analysis + 8 visualization)
 - **All 114 tests passing across entire project**
 
-### Stage 6: Baseline Simulation (Phase 1)
+### Stage 6: Unified Particle System Refactoring (CRITICAL BUG FIX)
+
+**Problem Identified**: The current implementation artificially separates "black holes" and "debris particles" using different integration schemes (leapfrog for BHs, semi-implicit Euler for debris). This breaks Newton's 3rd law symmetry and violates energy/momentum conservation.
+
+**Solution**: Unified particle system where all particles (former BHs + former debris) are treated identically in the physics loop, with metadata for tracking and analysis.
+
+#### Implementation Plan:
+
+**1. Unified State Arrays (state.py):**
+```python
+class SimulationState:
+    # Core physics arrays - ALL particles
+    positions: np.ndarray      # (N_total, 3) [ly]
+    velocities: np.ndarray     # (N_total, 3) [fraction of c]
+    masses: np.ndarray         # (N_total,) [M_sun]
+    accreted: np.ndarray       # (N_total,) [bool] - has this been accreted?
+
+    # Metadata arrays - for tracking and analysis only
+    particle_id: np.ndarray           # (N_total,) [int] - unique identifier
+    particle_type: np.ndarray         # (N_total,) [int] - BLACK_HOLE=0, DEBRIS=1
+    ring_id: np.ndarray               # (N_total,) [int] - ring (0-3) or -1 for debris
+    capture_radius: np.ndarray        # (N_total,) [ly] - accretion radius (0 for most)
+    initial_speed: np.ndarray         # (N_total,) [fraction of c] - speed at t=0
+    initial_position: np.ndarray      # (N_total, 3) [ly] - position at t=0
+    proper_times: np.ndarray          # (N_total,) [yr] - accumulated proper time
+```
+
+**2. Single Integration Loop (physics.py):**
+- Remove `update_particle_velocities_and_positions()` and `update_dynamic_bhs()` separation
+- Create single `update_all_particles()` function using leapfrog for ALL particles
+- Calculate forces as N² pairwise interactions (skip accreted particles)
+- All particles advance together in lockstep
+
+**3. Unified Force Calculation:**
+```python
+@jit(nopython=True)
+def calculate_total_acceleration(i, positions, velocities, masses, accreted, use_relativistic):
+    """Calculate gravitational acceleration on particle i from all other particles."""
+    accel = np.zeros(3)
+    for j in range(len(positions)):
+        if i == j or accreted[j]:
+            continue
+        # Calculate pairwise force
+        r_vec = positions[j] - positions[i]
+        r = np.linalg.norm(r_vec)
+        if r < 0.001:  # Minimum distance (0.001 ly)
+            continue
+        if use_relativistic:
+            gamma = lorentz_factor(velocities[j])
+            m_eff = gamma * masses[j]
+        else:
+            m_eff = masses[j]
+        accel += (G * m_eff / (r * r)) * (r_vec / r)
+    return accel
+```
+
+**4. Analysis with Metadata:**
+```python
+# Example queries using metadata
+ring1_mask = (particle_type == BLACK_HOLE) & (ring_id == 1)
+ring1_final_positions = positions[ring1_mask]
+
+fast_debris = (particle_type == DEBRIS) & (initial_speed > 0.9)
+fast_debris_velocities = velocities[fast_debris]
+```
+
+**5. Files to Modify:**
+- [x] **state.py**: Replace separate bh_*/debris_* arrays with unified particle arrays + metadata
+- [x] **physics.py**: Remove dual integrators, create single leapfrog update for all particles
+- [x] **evolution.py**: Single evolution loop, remove BH/debris distinction
+- [x] **initialization.py**: Build unified particle arrays, populate metadata
+- [x] **accretion.py**: Use capture_radius metadata instead of particle type
+- [x] **output.py**: Save unified arrays with metadata for post-processing
+- [x] **config.py**: Update to reflect unified particle system
+
+**Benefits:**
+- ✅ Guaranteed energy/momentum conservation (same integrator for all)
+- ✅ Simpler code (one loop instead of two)
+- ✅ More flexible (easy to add new particle types)
+- ✅ Fixes the fundamental conservation bug
+- ✅ Enables rich analysis via metadata filtering
+
+**Testing:**
+- [ ] Verify 2-body problem conserves energy/momentum perfectly
+- [ ] Verify 2-BH + 1-debris test conserves energy/momentum
+- [ ] Verify complex multi-ring test maintains conservation
+- [ ] Verify metadata queries work correctly
+- [ ] Verify accretion still functions properly
+
+**Deliverable**: Unified particle system with perfect conservation laws ✅
+
+### Stage 7: Baseline Simulation (Phase 1)
 - [ ] Create `baseline_config.yaml`
 - [ ] Run baseline simulation: 1000 particles, 50 Gyr, no debris gravity
 - [ ] Profile performance: identify bottlenecks
@@ -173,7 +264,7 @@ pytest>=7.3.0
 
 **Deliverable**: First complete simulation results with analysis
 
-### Stage 7: Barnes-Hut Tree Implementation
+### Stage 8: Barnes-Hut Tree Implementation
 - [ ] Implement octree construction with Numba-compatible arrays
 - [ ] Implement tree traversal for force calculation
 - [ ] Calculate aggregate mass and center of mass for nodes
@@ -185,7 +276,7 @@ pytest>=7.3.0
 
 **Deliverable**: Barnes-Hut tree code enabling 100k+ particle simulations
 
-### Stage 8: Add Debris Field Gravity (Phase 2)
+### Stage 9: Add Debris Field Gravity (Phase 2)
 - [ ] Enable Barnes-Hut for debris-debris interactions
 - [ ] Test with small particle count first (1000 particles)
 - [ ] Verify energy conservation with debris gravity enabled
@@ -195,7 +286,7 @@ pytest>=7.3.0
 
 **Deliverable**: Phase 2 results showing debris field effects
 
-### Stage 9: Parameter Exploration (Phase 3)
+### Stage 10: Parameter Exploration (Phase 3)
 - [ ] Implement parameter sweep framework
 - [ ] Load `sweep_config.yaml` and generate configurations
 - [ ] Run simulations in parallel (multiprocessing or job array)
@@ -205,7 +296,7 @@ pytest>=7.3.0
 
 **Deliverable**: Comprehensive parameter study with recommendations
 
-### Stage 10 (Optional): Advanced Features
+### Stage 11 (Optional): Advanced Features
 - [ ] Adaptive timestep based on minimum approach distance
 - [ ] GPU acceleration with CuPy or CUDA
 - [ ] More sophisticated accretion model (gravitational focusing)

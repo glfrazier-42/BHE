@@ -6,8 +6,8 @@ import pytest
 import tempfile
 import yaml
 from pathlib import Path
-from src.config import SimulationParameters
-from src import constants as const
+from bhe.config import SimulationParameters
+from bhe import constants as const
 
 
 def test_valid_baseline_config():
@@ -51,8 +51,7 @@ def test_ring0_inside_schwarzschild_radius():
         },
         'physics_options': {
             'force_method': 'direct',
-            'include_debris_gravity': False,
-            'use_relativistic_mass': True
+            'use_newtonian_enhancements': False
         },
         'diagnostics': {
             'check_energy_conservation': True,
@@ -100,8 +99,7 @@ def test_debris_velocity_exceeds_c():
         },
         'physics_options': {
             'force_method': 'direct',
-            'include_debris_gravity': False,
-            'use_relativistic_mass': True
+            'use_newtonian_enhancements': False
         },
         'diagnostics': {
             'check_energy_conservation': True,
@@ -149,8 +147,7 @@ def test_negative_timestep():
         },
         'physics_options': {
             'force_method': 'direct',
-            'include_debris_gravity': False,
-            'use_relativistic_mass': True
+            'use_newtonian_enhancements': False
         },
         'diagnostics': {
             'check_energy_conservation': True,
@@ -206,8 +203,7 @@ def test_non_keplerian_velocity_warning():
         },
         'physics_options': {
             'force_method': 'direct',
-            'include_debris_gravity': False,
-            'use_relativistic_mass': True
+            'use_newtonian_enhancements': False
         },
         'diagnostics': {
             'check_energy_conservation': True,

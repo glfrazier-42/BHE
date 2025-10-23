@@ -72,7 +72,7 @@ ring_0:
   # - manual: use specified orbital_velocity_fraction_c (may be unstable orbit)
   velocity_mode: "keplerian"  # v ≈ 0.67c at r=14 Gly
   # Note: Schwarzschild radius for M=4e22 M_sun is ~12.5 Gly
-  # Ring 0 at 14 Gly gives stable orbit at 0.67c (highly relativistic!)
+  # Ring 0 at 14 Gly gives stable orbit at 0.67c
 
   capture_radius_gly: 0.5  # Accretion radius
 
@@ -115,8 +115,7 @@ simulation_control:
 # Physics options
 physics_options:
   force_method: "barnes_hut"  # "direct" or "barnes_hut"
-  include_debris_gravity: false  # Phase 1: off, Phase 2: on
-  use_relativistic_mass: true
+  use_newtonian_enhancements: false  # simulation should terminate with an error if set to true
   barnes_hut:
     opening_angle_theta: 0.5
     max_particles_per_leaf: 8
@@ -151,7 +150,7 @@ sweep_parameters:
 
 A supermassive black hole explodes, releasing all its mass as debris. Normally, this debris would gravitationally collapse back on itself (since ejection velocities < c). However, a system of orbiting black holes in close, high-speed orbits provides the escape mechanism:
 
-1. **Ring 0 (Inner Ring)**: Small number of black holes orbiting just outside the Schwarzschild radius at highly relativistic velocities (~0.67c for stable Keplerian orbit)
+1. **Ring 0 (Inner Ring)**: Small number of black holes orbiting just outside the Schwarzschild radius at high velocities (e.g., ~0.67c) in a stable Keplerian orbit)
 2. These BHs immediately begin accreting nearby debris
 3. Their high velocity + accumulated mass creates a powerful gravitational drag effect
 4. They act as "tugboats," pulling debris streams outward and preventing collapse
@@ -159,7 +158,7 @@ A supermassive black hole explodes, releasing all its mass as debris. Normally, 
 
 ### Four-Ring Structure
 
-**Ring 0 - The Tugboats (NEW)**
+**Ring 0 - The Tugboats **
 - **Location**: ~14 Gly from center (just outside Schwarzschild radius r_s ≈ 12.5 Gly)
 - **Number**: 4-8 black holes
 - **Individual mass**: 10²⁰ - 10²¹ M☉ (much smaller than central BH)
@@ -191,11 +190,20 @@ A supermassive black hole explodes, releasing all its mass as debris. Normally, 
 - **Mass per BH**: 1.5×10²² M☉
 - **Role**: Outer gravitational boundary
 
+## Output
+
+A particle-identification file is created. Every object specified by the configuration (including every particle in the explosion debris) is given an identifier, is described (e.g., explosion debris, Ring 2 black hole, etc.), and has its initial mass.
+
+An event file is created. At a specified time interval, the location and velocity of every object is record. Also, accretion events are recorded. An accretion event specifies both the particle that was accreted and the accreting particle (black hole).
+
 ## Physics Implementation
 
 ### Constants
 
 ```
+DEPRECATED! We are using light-year for distance, year for time, and solar-mass for mass.
+All other constants are defined relative to these.
+
 c = 299,792,458 m/s              // Speed of light
 G = 6.674e-11 m³/(kg·s²)         // Gravitational constant
 M_sun = 1.989e30 kg              // Solar mass
@@ -214,7 +222,7 @@ m_relativistic = γ(v) × m_rest
 
 ### Gravitational Force Calculation Methods
 
-The simulation supports two modes for force calculation:
+The simulation (for now) only supports two modes for force calculation:
 
 **1. Direct N-body** (for small N, validation, or Ring 0-3 forces)
 ```
@@ -263,7 +271,7 @@ For large particle counts (100k+), direct N² force calculation is infeasible. T
 4. For each node (bottom-up), compute aggregate properties:
    - Total mass: M_node = Σ m_i (for all particles in subtree)
    - Center of mass: COM_node = Σ(m_i × pos_i) / M_node
-   - Aggregate velocity: v_node = Σ(m_i × vel_i) / M_node (for relativistic mass)
+   - Aggregate velocity: v_node = Σ(m_i × vel_i) / M_node (we *never* use relativistic mass)
 ```
 
 **Phase 2: Force Calculation (Tree Walk)**
@@ -284,7 +292,7 @@ For each particle i:
       
       If theta < theta_threshold:
         # Node is sufficiently far: use aggregate
-        m_eff = node.mass (or γ × node.mass if relativistic)
+        m_eff = node.mass (never use γ × node.mass, because we never do relativistic gravity)
         F_i += G × m_eff / distance² × (r_vec / distance)
       Else if node is leaf:
         # Too close: direct calculation with leaf particles
@@ -349,7 +357,7 @@ Initial configuration at t=0:
 - Place Ring 0 BHs in circular orbit at radius R₀ (must be > Schwarzschild radius)
 - For M = 4×10²² M☉: r_s ≈ 12.5 Gly, so R₀ should be ≥ 14 Gly for physical stability
 - **Keplerian mode** (recommended): v_orbit = sqrt(G × M_central / R₀)
-  - At R₀ = 14 Gly: v ≈ 0.67c (highly relativistic!)
+  - At R₀ = 14 Gly: v ≈ 0.67c
 - **Manual mode** (for experiments): Specify v directly
   - If v > v_keplerian: orbit will spiral outward
   - If v < v_keplerian: orbit will spiral inward
@@ -405,7 +413,7 @@ This is the complex part. Several approaches:
      
      c. Update debris particle positions and velocities:
         For each debris particle:
-          - Calculate force from Ring 0 BHs (using relativistic mass)
+          - Calculate force from Ring 0 BHs (NEVER using relativistic mass)
           - Calculate force from Rings 1-3
           - Calculate force from other debris particles (if feasible)
           - Update position and velocity
@@ -464,8 +472,7 @@ class SimulationParameters:
     output_interval: float  # seconds
     
     # Physics options
-    include_debris_gravity: bool
-    use_relativistic_mass: bool
+    use_newtonian_enhancements: bool
     
     @classmethod
     def from_yaml(cls, filepath: str):

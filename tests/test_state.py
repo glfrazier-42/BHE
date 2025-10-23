@@ -13,59 +13,63 @@ from pathlib import Path
 import tempfile
 import os
 
-from src.state import SimulationState
-from src.initialization import initialize_simulation
-from src.config import SimulationParameters
-from src import constants as const
+from bhe.state import SimulationState
+from bhe.initialization import initialize_simulation
+from bhe.config import SimulationParameters
+from bhe import constants as const
 
 
 class TestSimulationStateBasics:
     """Tests for basic SimulationState functionality."""
 
     def test_initialization(self):
-        """Test creating empty simulation state."""
-        state = SimulationState(n_bh=10, n_debris=100, M_central=1.0e30)
+        """Test creating empty simulation state (unified particle system)."""
+        n_total = 110  # 10 BHs + 100 debris
+        state = SimulationState(n_total=n_total, M_central=1.0)  # Natural units: M_sun
 
-        assert state.n_bh == 10
-        assert state.n_debris == 100
-        assert state.M_central == 1.0e30
+        assert state.n_total == 110
+        assert state.M_central == 1.0
 
-        # Check arrays are initialized
-        assert state.bh_positions.shape == (10, 3)
-        assert state.debris_positions.shape == (100, 3)
+        # Check unified arrays are initialized
+        assert state.positions.shape == (110, 3)
+        assert state.velocities.shape == (110, 3)
+        assert state.masses.shape == (110,)
+        assert state.accreted.shape == (110,)
 
         # Check initial time
         assert state.time == 0.0
         assert state.timestep_count == 0
 
     def test_active_debris_count(self):
-        """Test counting active debris particles."""
-        state = SimulationState(n_bh=5, n_debris=100, M_central=1.0e30)
+        """Test counting active particles (unified system)."""
+        n_total = 105  # 5 BHs + 100 debris
+        state = SimulationState(n_total=n_total, M_central=1.0)
 
         # Initially all active
-        assert state.n_debris_active == 100
-        assert state.n_debris_accreted == 0
+        assert state.n_active == 105
+        assert state.n_accreted == 0
 
         # Accrete some particles
-        state.debris_accreted[0] = True
-        state.debris_accreted[10] = True
-        state.debris_accreted[50] = True
+        state.accreted[0] = True
+        state.accreted[10] = True
+        state.accreted[50] = True
 
-        assert state.n_debris_active == 97
-        assert state.n_debris_accreted == 3
+        assert state.n_active == 102
+        assert state.n_accreted == 3
 
     def test_active_debris_mask(self):
-        """Test getting active debris mask."""
-        state = SimulationState(n_bh=5, n_debris=100, M_central=1.0e30)
+        """Test getting active particle mask (unified system)."""
+        n_total = 105  # 5 BHs + 100 debris
+        state = SimulationState(n_total=n_total, M_central=1.0)
 
         # Accrete some particles
-        state.debris_accreted[5] = True
-        state.debris_accreted[15] = True
+        state.accreted[5] = True
+        state.accreted[15] = True
 
-        mask = state.get_active_debris_mask()
+        mask = ~state.accreted  # Active mask is inverse of accreted
 
-        assert mask.shape == (100,)
-        assert np.sum(mask) == 98  # 100 - 2 accreted
+        assert mask.shape == (105,)
+        assert np.sum(mask) == 103  # 105 - 2 accreted
         assert mask[5] == False
         assert mask[15] == False
         assert mask[0] == True
@@ -75,8 +79,9 @@ class TestHDF5SaveLoad:
     """Tests for HDF5 save/load functionality."""
 
     def test_save_and_load_empty_state(self):
-        """Test saving and loading empty simulation state."""
-        state1 = SimulationState(n_bh=10, n_debris=100, M_central=4.0e22 * const.M_sun)
+        """Test saving and loading empty simulation state (unified system)."""
+        n_total = 110  # 10 BHs + 100 debris
+        state1 = SimulationState(n_total=n_total, M_central=4.0e22)  # Natural units: M_sun
 
         with tempfile.TemporaryDirectory() as tmpdir:
             filepath = Path(tmpdir) / "test_state.h5"
@@ -89,15 +94,15 @@ class TestHDF5SaveLoad:
             state2 = SimulationState.load_from_hdf5(str(filepath))
 
             # Check metadata
-            assert state2.n_bh == state1.n_bh
-            assert state2.n_debris == state1.n_debris
+            assert state2.n_total == state1.n_total
             assert state2.M_central == state1.M_central
             assert state2.time == state1.time
             assert state2.timestep_count == state1.timestep_count
 
             # Check arrays
-            assert np.allclose(state2.bh_positions, state1.bh_positions)
-            assert np.allclose(state2.debris_positions, state1.debris_positions)
+            assert np.allclose(state2.positions, state1.positions)
+            assert np.allclose(state2.velocities, state1.velocities)
+            assert np.allclose(state2.masses, state1.masses)
 
     def test_save_and_load_initialized_state(self):
         """Test saving and loading fully initialized state."""
@@ -114,33 +119,30 @@ class TestHDF5SaveLoad:
             # Load
             state2 = SimulationState.load_from_hdf5(str(filepath))
 
-            # Check all arrays are identical
-            assert np.allclose(state2.bh_positions, state1.bh_positions)
-            assert np.allclose(state2.bh_velocities, state1.bh_velocities)
-            assert np.allclose(state2.bh_masses, state1.bh_masses)
-            assert np.array_equal(state2.bh_ring_ids, state1.bh_ring_ids)
-            assert np.array_equal(state2.bh_is_static, state1.bh_is_static)
-            assert np.allclose(state2.bh_capture_radii, state1.bh_capture_radii)
-
-            assert np.allclose(state2.debris_positions, state1.debris_positions)
-            assert np.allclose(state2.debris_velocities, state1.debris_velocities)
-            assert np.allclose(state2.debris_masses, state1.debris_masses)
-            assert np.allclose(state2.debris_proper_times, state1.debris_proper_times)
-            assert np.array_equal(state2.debris_accreted, state1.debris_accreted)
-            assert np.array_equal(state2.debris_accreted_by, state1.debris_accreted_by)
+            # Check all arrays are identical (unified particle system)
+            assert np.allclose(state2.positions, state1.positions)
+            assert np.allclose(state2.velocities, state1.velocities)
+            assert np.allclose(state2.masses, state1.masses)
+            assert np.array_equal(state2.particle_type, state1.particle_type)
+            assert np.array_equal(state2.ring_id, state1.ring_id)
+            assert np.allclose(state2.capture_radius, state1.capture_radius)
+            assert np.allclose(state2.proper_times, state1.proper_times)
+            assert np.array_equal(state2.accreted, state1.accreted)
+            assert np.array_equal(state2.accreted_by, state1.accreted_by)
 
     def test_save_with_accretion(self):
-        """Test saving state with some particles accreted."""
-        state1 = SimulationState(n_bh=5, n_debris=100, M_central=1.0e30)
+        """Test saving state with some particles accreted (unified system)."""
+        n_total = 105  # 5 BHs + 100 debris
+        state1 = SimulationState(n_total=n_total, M_central=1.0)
 
         # Simulate some accretion
-        state1.debris_accreted[10] = True
-        state1.debris_accreted_by[10] = 2
-        state1.debris_accreted[25] = True
-        state1.debris_accreted_by[25] = 3
+        state1.accreted[10] = True
+        state1.accreted_by[10] = 2
+        state1.accreted[25] = True
+        state1.accreted_by[25] = 3
 
         # Advance time
-        state1.time = 1.0e16  # Some time in seconds
+        state1.time = 1.0e7  # Some time in years
         state1.timestep_count = 1000
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -153,11 +155,11 @@ class TestHDF5SaveLoad:
             state2 = SimulationState.load_from_hdf5(str(filepath))
 
             # Check accretion state preserved
-            assert state2.n_debris_accreted == 2
-            assert state2.debris_accreted[10] == True
-            assert state2.debris_accreted_by[10] == 2
-            assert state2.debris_accreted[25] == True
-            assert state2.debris_accreted_by[25] == 3
+            assert state2.n_accreted == 2
+            assert state2.accreted[10] == True
+            assert state2.accreted_by[10] == 2
+            assert state2.accreted[25] == True
+            assert state2.accreted_by[25] == 3
 
             # Check time advanced
             assert state2.time == state1.time
@@ -168,7 +170,7 @@ class TestHDF5SaveLoad:
         with tempfile.TemporaryDirectory() as tmpdir:
             filepath = Path(tmpdir) / "subdir1" / "subdir2" / "test_state.h5"
 
-            state = SimulationState(n_bh=5, n_debris=10, M_central=1.0e30)
+            state = SimulationState(n_total=15, M_central=1.0)  # 5 BHs + 10 debris
             state.save_to_hdf5(str(filepath))
 
             assert filepath.exists()
@@ -176,11 +178,12 @@ class TestHDF5SaveLoad:
 
     def test_compression_reduces_file_size(self):
         """Test that HDF5 compression reduces file size."""
-        state = SimulationState(n_bh=10, n_debris=1000, M_central=1.0e30)
+        n_total = 1010  # 10 BHs + 1000 debris
+        state = SimulationState(n_total=n_total, M_central=1.0)
 
-        # Fill with non-zero data
-        state.debris_positions[:] = np.random.randn(1000, 3) * 1e24
-        state.debris_velocities[:] = np.random.randn(1000, 3) * 1e6
+        # Fill with non-zero data (natural units: positions in ly, velocities in units of c)
+        state.positions[:] = np.random.randn(n_total, 3) * 1e9  # Gly scale
+        state.velocities[:] = np.random.randn(n_total, 3) * 0.1  # 0.1c scale
 
         with tempfile.TemporaryDirectory() as tmpdir:
             filepath_compressed = Path(tmpdir) / "compressed.h5"
@@ -216,7 +219,7 @@ class TestStateRepresentation:
         assert "Gyr" in repr_str
         assert "Black holes" in repr_str
         assert "Debris" in repr_str
-        assert "active" in repr_str
+        assert "Active" in repr_str
 
     def test_repr_shows_ring_breakdown(self):
         """Test that __repr__ shows ring breakdown."""

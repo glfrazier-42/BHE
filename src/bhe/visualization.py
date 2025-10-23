@@ -23,8 +23,8 @@ from pathlib import Path
 from typing import Optional
 import h5py
 
-from . import constants as const
-from .analysis import (
+from bhe import constants as const
+from bhe.analysis import (
     get_final_debris_state,
     get_ring0_trajectories,
     calculate_escape_fraction_vs_time,
@@ -59,8 +59,8 @@ def plot_redshift_vs_distance(hdf5_filepath: str, output_path: str):
     # Load final debris state
     state = get_final_debris_state(hdf5_filepath)
 
-    # Convert to convenient units
-    distances_gly = state['distances'] / const.Gly_to_m
+    # Convert to convenient units (distances already in ly, convert to Gly)
+    distances_gly = state['distances'] / const.Gly
     redshifts = state['redshifts']
     accreted = state['accreted']
 
@@ -111,7 +111,7 @@ def plot_proper_time_vs_redshift(hdf5_filepath: str, output_path: str):
 
     # Convert to convenient units
     redshifts = state['redshifts']
-    proper_times_gyr = state['proper_times'] * const.s_to_Gyr
+    proper_times_gyr = state['proper_times'] / 1.0e9  # yr to Gyr
     accreted = state['accreted']
 
     # Separate escaped and accreted
@@ -160,7 +160,7 @@ def plot_ring0_trajectories_3d(hdf5_filepath: str, output_path: str):
     # Load Ring 0 trajectories
     trajectories = get_ring0_trajectories(hdf5_filepath)
 
-    if trajectories is None or trajectories['n_bh'] == 0:
+    if trajectories is None or trajectories['n_ring0'] == 0:
         # Create empty plot with message
         fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111, projection='3d')
@@ -174,8 +174,8 @@ def plot_ring0_trajectories_3d(hdf5_filepath: str, output_path: str):
         plt.close()
         return
 
-    # Convert positions to Gly
-    positions_gly = trajectories['positions'] / const.Gly_to_m
+    # Convert positions to Gly (positions already in ly)
+    positions_gly = trajectories['positions'] / const.Gly
     n_timesteps, n_bh, _ = positions_gly.shape
 
     # Create 3D plot
@@ -284,14 +284,24 @@ def animate_system_evolution(hdf5_filepath: str, output_path: str,
     """
     with h5py.File(hdf5_filepath, 'r') as f:
         times = f['timeseries/time'][::frame_skip]
-        debris_positions = f['timeseries/debris_positions'][::frame_skip]
-        debris_accreted = f['timeseries/debris_accreted'][::frame_skip]
-        bh_positions = f['timeseries/bh_positions'][::frame_skip]
+        all_positions = f['timeseries/positions'][::frame_skip]
+        all_accreted = f['timeseries/accreted'][::frame_skip]
 
-    # Convert to Gly
-    times_gyr = times * const.s_to_Gyr
-    debris_pos_gly = debris_positions / const.Gly_to_m
-    bh_pos_gly = bh_positions / const.Gly_to_m
+        # Get metadata to filter debris and BHs
+        from bhe.state import DEBRIS, BLACK_HOLE
+        particle_type = f['metadata/particle_type'][:]
+        debris_mask = (particle_type == DEBRIS)
+        bh_mask = (particle_type == BLACK_HOLE)
+
+    # Extract debris and BH positions
+    debris_positions = all_positions[:, debris_mask, :]
+    debris_accreted = all_accreted[:, debris_mask]
+    bh_positions = all_positions[:, bh_mask, :]
+
+    # Convert to Gly (positions already in ly, times in yr)
+    times_gyr = times / 1.0e9
+    debris_pos_gly = debris_positions / const.Gly
+    bh_pos_gly = bh_positions / const.Gly
 
     n_frames = len(times)
 

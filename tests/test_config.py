@@ -4,8 +4,8 @@ Unit tests for configuration loading and parsing.
 
 import pytest
 from pathlib import Path
-from src.config import SimulationParameters, RingConfig
-from src import constants as const
+from bhe.config import SimulationParameters, RingConfig
+from bhe import constants as const
 
 
 def test_load_baseline_config():
@@ -18,7 +18,7 @@ def test_load_baseline_config():
     assert params.output_directory == "./results/baseline"
 
     # Check central BH mass (4e22 solar masses)
-    expected_mass = 4.0e22 * const.M_sun
+    expected_mass = 4.0e22 
     assert abs(params.M_central - expected_mass) / expected_mass < 1e-10
 
     # Check debris field
@@ -48,8 +48,8 @@ def test_ring_configurations():
     assert ring1.ring_id == 1
     assert ring1.count == 4
     assert ring1.is_static == True
-    assert abs(ring1.radius - 100.0 * const.Gly_to_m) / const.Gly_to_m < 1e-10
-    assert abs(ring1.mass_per_bh - 5.0e21 * const.M_sun) / const.M_sun < 1e-10
+    assert abs(ring1.radius - 100.0 * const.Gly) / const.Gly < 1e-10
+    assert abs(ring1.mass_per_bh - 5.0e21 ) / 1.0 < 1e-10
 
     # Check Ring 2
     ring2 = params.rings[1]
@@ -70,10 +70,10 @@ def test_simulation_control_parameters():
     params = SimulationParameters.from_yaml(str(config_path))
 
     # Check time conversions (Gyr to seconds)
-    assert abs(params.dt - 0.001 * const.Gyr_to_s) / const.Gyr_to_s < 1e-10
-    assert abs(params.duration - 50.0 * const.Gyr_to_s) / const.Gyr_to_s < 1e-10
-    assert abs(params.output_interval - 0.1 * const.Gyr_to_s) / const.Gyr_to_s < 1e-10
-    assert abs(params.checkpoint_interval - 5.0 * const.Gyr_to_s) / const.Gyr_to_s < 1e-10
+    assert abs(params.dt - 0.001 * 1.0e9) / 1.0e9 < 1e-10
+    assert abs(params.duration - 50.0 * 1.0e9) / 1.0e9 < 1e-10
+    assert abs(params.output_interval - 0.1 * 1.0e9) / 1.0e9 < 1e-10
+    assert abs(params.checkpoint_interval - 5.0 * 1.0e9) / 1.0e9 < 1e-10
 
 
 def test_physics_options():
@@ -82,8 +82,7 @@ def test_physics_options():
     params = SimulationParameters.from_yaml(str(config_path))
 
     assert params.force_method == "direct"
-    assert params.include_debris_gravity == False
-    assert params.use_relativistic_mass == True
+    assert params.use_newtonian_enhancements == False
 
     # Barnes-Hut parameters
     assert params.barnes_hut_theta == 0.5
@@ -113,8 +112,8 @@ def test_ring_config_repr():
     ring = RingConfig(
         ring_id=1,
         count=4,
-        radius=100.0 * const.Gly_to_m,
-        mass_per_bh=5.0e21 * const.M_sun,
+        radius=100.0 * const.Gly,
+        mass_per_bh=5.0e21 ,
         is_static=True
     )
     repr_str = repr(ring)
@@ -127,11 +126,11 @@ def test_ring_config_repr():
     ring0 = RingConfig(
         ring_id=0,
         count=4,
-        radius=3.0 * const.Gly_to_m,
-        mass_per_bh=1.0e21 * const.M_sun,
+        radius=3.0 * const.Gly,
+        mass_per_bh=1.0e21 ,
         is_static=False,
         orbital_velocity=0.8 * const.c,
-        capture_radius=0.5 * const.Gly_to_m
+        capture_radius=0.5 * const.Gly
     )
     repr_str = repr(ring0)
     assert "Ring 0" in repr_str
@@ -186,8 +185,7 @@ def test_keplerian_velocity_mode():
         },
         'physics_options': {
             'force_method': 'direct',
-            'include_debris_gravity': False,
-            'use_relativistic_mass': True
+            'use_newtonian_enhancements': False
         },
         'diagnostics': {
             'check_energy_conservation': True,
@@ -210,8 +208,8 @@ def test_keplerian_velocity_mode():
 
         # Calculate expected Keplerian velocity
         # v = sqrt(G * M / r)
-        r = 3.0 * const.Gly_to_m
-        M = 4.0e+22 * const.M_sun
+        r = 3.0 * const.Gly
+        M = 4.0e+22 
         v_expected = np.sqrt(const.G * M / r)
 
         # Check that orbital velocity matches Keplerian calculation

@@ -1,0 +1,66 @@
+# Two-particle test: LONGER simulation to test conservation laws
+# Two black holes in Keplerian orbit, no debris
+simulation_name: "two_particle_long_test"
+output_directory: "./results/test"
+
+# Central black hole
+central_black_hole:
+  mass_solar_masses: 4.0e+22
+
+# Ring 0: 2 BHs in circular orbit
+ring_0:
+  count: 2
+  radius_gly: 100.0
+  mass_per_bh_solar_masses: 1.0e+21
+  velocity_mode: "keplerian"
+  capture_radius_gly: 0.5
+
+# No other rings
+ring_1:
+  count: 0
+  radius_gly: 150.0
+  mass_per_bh_solar_masses: 1.0e+21
+  is_static: true
+
+ring_2:
+  count: 0
+  radius_gly: 200.0
+  mass_per_bh_solar_masses: 1.0e+21
+  is_static: true
+
+ring_3:
+  count: 0
+  radius_gly: 250.0
+  mass_per_bh_solar_masses: 1.0e+21
+  is_static: true
+
+# Single debris particle at center with zero velocity (represents central mass)
+debris_field:
+  particle_count: 1
+  position_min_gly: 0.0
+  position_max_gly: 0.0001  # Very small, essentially at origin
+  velocity_min_fraction_c: 0.0
+  velocity_max_fraction_c: 0.0
+  distribution: "uniform"
+
+# Longer test run - 100 timesteps instead of 10
+simulation_control:
+  timestep_gyr: 0.001
+  duration_gyr: 0.1  # 100 timesteps (10x longer)
+  output_interval_gyr: 0.01  # Save every 10 timesteps
+  checkpoint_interval_gyr: 5.0
+
+# Physics options
+physics_options:
+  force_method: "direct"
+  use_newtonian_enhancements: false
+  barnes_hut:
+    opening_angle_theta: 0.5
+    max_particles_per_leaf: 8
+    tree_rebuild_interval: 10
+
+# Logging and diagnostics
+diagnostics:
+  check_energy_conservation: true
+  check_momentum_conservation: true
+  log_level: "INFO"

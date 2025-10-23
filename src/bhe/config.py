@@ -11,7 +11,7 @@ import yaml
 from pathlib import Path
 import numpy as np
 
-from . import constants as const
+from bhe import constants as const
 
 
 @dataclass
@@ -20,17 +20,17 @@ class RingConfig:
 
     ring_id: int
     count: int
-    radius: float  # meters
-    mass_per_bh: float  # kg
+    radius: float  # light-years
+    mass_per_bh: float  # solar masses
     is_static: bool
-    orbital_velocity: float = 0.0  # m/s (0 for static rings)
-    capture_radius: float = 0.0  # meters (only for Ring 0)
+    orbital_velocity: float = 0.0  # fraction of c (0 for static rings)
+    capture_radius: float = 0.0  # light-years (only for Ring 0)
 
     def __repr__(self):
         """Human-readable representation."""
-        radius_gly = self.radius * const.m_to_Gly
-        mass_solar = self.mass_per_bh * const.kg_to_solar_mass
-        vel_frac_c = self.orbital_velocity / const.c
+        radius_gly = self.radius / const.Gly  # ly → Gly
+        mass_solar = self.mass_per_bh  # Already in M_sun
+        vel_frac_c = self.orbital_velocity  # Already fraction of c
 
         if self.is_static:
             return (f"Ring {self.ring_id}: {self.count} BHs at {radius_gly:.1f} Gly, "
@@ -45,11 +45,11 @@ class SimulationParameters:
     """
     Container for all simulation parameters.
 
-    All internal values stored in SI units:
-    - Distance: meters
-    - Time: seconds
-    - Mass: kilograms
-    - Velocity: m/s
+    All internal values stored in natural units:
+    - Distance: light-years (ly)
+    - Time: years (yr)
+    - Mass: solar masses (M_sun)
+    - Velocity: fraction of speed of light (c = 1.0 ly/yr)
     """
 
     # Metadata
@@ -57,29 +57,28 @@ class SimulationParameters:
     output_directory: str
 
     # Central black hole
-    M_central: float  # kg
+    M_central: float  # solar masses
 
     # Ring configurations
     rings: List[RingConfig] = field(default_factory=list)
 
     # Debris field
     debris_count: int = 1000
-    debris_r_min: float = 0.0  # meters
-    debris_r_max: float = 0.0  # meters
-    debris_v_min: float = 0.0  # m/s
-    debris_v_max: float = 0.0  # m/s
+    debris_r_min: float = 0.0  # light-years
+    debris_r_max: float = 0.0  # light-years
+    debris_v_min: float = 0.0  # fraction of c
+    debris_v_max: float = 0.0  # fraction of c
     debris_distribution: str = "uniform"
 
     # Simulation control
-    dt: float = 0.0  # seconds
-    duration: float = 0.0  # seconds
-    output_interval: float = 0.0  # seconds
-    checkpoint_interval: float = 0.0  # seconds
+    dt: float = 0.0  # years
+    duration: float = 0.0  # years
+    output_interval: float = 0.0  # years
+    checkpoint_interval: float = 0.0  # years
 
     # Physics options
     force_method: str = "direct"  # "direct" or "barnes_hut"
-    include_debris_gravity: bool = False
-    use_relativistic_mass: bool = True
+    use_newtonian_enhancements: bool = False  # Must be False; errors if True
 
     # Barnes-Hut parameters (if applicable)
     barnes_hut_theta: float = 0.5
@@ -94,6 +93,8 @@ class SimulationParameters:
     @property
     def debris_mass_per_particle(self) -> float:
         """Calculate mass per debris particle (M_central / particle_count)."""
+        if self.debris_count == 0:
+            return 0.0
         return self.M_central / self.debris_count
 
     @property
@@ -110,9 +111,9 @@ class SimulationParameters:
         """
         warnings = []
 
-        # Calculate Schwarzschild radius
-        r_schwarzschild = 2 * const.G * self.M_central / (const.c ** 2)
-        r_schwarzschild_gly = r_schwarzschild / const.Gly_to_m
+        # Calculate Schwarzschild radius in natural units
+        r_schwarzschild = 2 * const.G * self.M_central / const.c_squared  # ly
+        r_schwarzschild_gly = r_schwarzschild / const.Gly  # Gly
 
         # Check central mass is positive
         if self.M_central <= 0:
@@ -128,8 +129,8 @@ class SimulationParameters:
         if self.debris_v_min >= self.debris_v_max:
             warnings.append(f"ERROR: debris_v_min must be < debris_v_max")
 
-        if self.debris_v_max >= const.c:
-            warnings.append(f"ERROR: debris_v_max ({self.debris_v_max/const.c:.3f}c) must be < c")
+        if self.debris_v_max >= 1.0:
+            warnings.append(f"ERROR: debris_v_max ({self.debris_v_max:.3f}c) must be < c")
 
         # Check timestep
         if self.dt <= 0:
@@ -156,14 +157,14 @@ class SimulationParameters:
             # For Ring 0, check if inside Schwarzschild radius
             if ring.ring_id == 0 and ring.radius < r_schwarzschild:
                 warnings.append(
-                    f"ERROR: {ring_name} radius ({ring.radius/const.Gly_to_m:.2f} Gly) is INSIDE "
+                    f"ERROR: {ring_name} radius ({ring.radius/const.Gly:.2f} Gly) is INSIDE "
                     f"Schwarzschild radius ({r_schwarzschild_gly:.2f} Gly). No stable orbit possible!"
                 )
 
             # Warn if Ring 0 is very close to Schwarzschild radius
             if ring.ring_id == 0 and ring.radius < 1.2 * r_schwarzschild:
                 warnings.append(
-                    f"WARNING: {ring_name} radius ({ring.radius/const.Gly_to_m:.2f} Gly) is very close to "
+                    f"WARNING: {ring_name} radius ({ring.radius/const.Gly:.2f} Gly) is very close to "
                     f"Schwarzschild radius ({r_schwarzschild_gly:.2f} Gly). Orbit may be unstable."
                 )
 
@@ -172,9 +173,9 @@ class SimulationParameters:
                 if ring.orbital_velocity <= 0:
                     warnings.append(f"ERROR: {ring_name} orbital velocity must be positive")
 
-                if ring.orbital_velocity >= const.c:
+                if ring.orbital_velocity >= 1.0:
                     warnings.append(
-                        f"ERROR: {ring_name} orbital velocity ({ring.orbital_velocity/const.c:.3f}c) "
+                        f"ERROR: {ring_name} orbital velocity ({ring.orbital_velocity:.3f}c) "
                         f"must be < c"
                     )
 
@@ -184,18 +185,18 @@ class SimulationParameters:
 
                 if v_ratio < 0.5:
                     warnings.append(
-                        f"WARNING: {ring_name} velocity ({ring.orbital_velocity/const.c:.3f}c) is much less than "
-                        f"Keplerian ({v_keplerian/const.c:.3f}c). Orbit will spiral inward rapidly."
+                        f"WARNING: {ring_name} velocity ({ring.orbital_velocity:.3f}c) is much less than "
+                        f"Keplerian ({v_keplerian:.3f}c). Orbit will spiral inward rapidly."
                     )
                 elif v_ratio > 2.0:
                     warnings.append(
-                        f"WARNING: {ring_name} velocity ({ring.orbital_velocity/const.c:.3f}c) is much greater than "
-                        f"Keplerian ({v_keplerian/const.c:.3f}c). Orbit will spiral outward rapidly."
+                        f"WARNING: {ring_name} velocity ({ring.orbital_velocity:.3f}c) is much greater than "
+                        f"Keplerian ({v_keplerian:.3f}c). Orbit will spiral outward rapidly."
                     )
                 elif abs(v_ratio - 1.0) > 0.1:
                     warnings.append(
-                        f"INFO: {ring_name} velocity ({ring.orbital_velocity/const.c:.3f}c) differs from "
-                        f"Keplerian ({v_keplerian/const.c:.3f}c) by {abs(v_ratio-1.0)*100:.1f}%. "
+                        f"INFO: {ring_name} velocity ({ring.orbital_velocity:.3f}c) differs from "
+                        f"Keplerian ({v_keplerian:.3f}c) by {abs(v_ratio-1.0)*100:.1f}%. "
                         f"Orbit may not be stable."
                     )
 
@@ -206,18 +207,18 @@ class SimulationParameters:
 
                 if ring.capture_radius > ring.radius * 0.1:
                     warnings.append(
-                        f"WARNING: {ring_name} capture_radius ({ring.capture_radius/const.Gly_to_m:.2f} Gly) "
-                        f"is large compared to orbital radius ({ring.radius/const.Gly_to_m:.2f} Gly). "
+                        f"WARNING: {ring_name} capture_radius ({ring.capture_radius/const.Gly:.2f} Gly) "
+                        f"is large compared to orbital radius ({ring.radius/const.Gly:.2f} Gly). "
                         f"May accrete too aggressively."
                     )
 
         # Check for overlapping rings (warn if rings are too close)
         for i, ring1 in enumerate(self.rings):
             for ring2 in self.rings[i+1:]:
-                if abs(ring1.radius - ring2.radius) < 1.0 * const.Gly_to_m:
+                if abs(ring1.radius - ring2.radius) < 1.0 * const.Gly:
                     warnings.append(
                         f"WARNING: Ring {ring1.ring_id} and Ring {ring2.ring_id} are very close "
-                        f"({abs(ring1.radius - ring2.radius)/const.Gly_to_m:.2f} Gly apart)"
+                        f"({abs(ring1.radius - ring2.radius)/const.Gly:.2f} Gly apart)"
                     )
 
         return warnings
@@ -263,9 +264,8 @@ class SimulationParameters:
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
 
-        # Extract and convert central black hole mass
-        M_central_solar = to_float(config['central_black_hole']['mass_solar_masses'])
-        M_central = M_central_solar * const.M_sun
+        # Extract central black hole mass (already in M_sun)
+        M_central = to_float(config['central_black_hole']['mass_solar_masses'])
 
         # Parse ring configurations
         rings = []
@@ -282,9 +282,9 @@ class SimulationParameters:
             if count == 0:
                 continue
 
-            # Convert units
-            radius = to_float(ring_data['radius_gly']) * const.Gly_to_m
-            mass_per_bh = to_float(ring_data['mass_per_bh_solar_masses']) * const.M_sun
+            # Parse values in natural units (Gly → ly, M_sun, fraction of c)
+            radius = to_float(ring_data['radius_gly']) * const.Gly  # Gly → ly
+            mass_per_bh = to_float(ring_data['mass_per_bh_solar_masses'])  # Already in M_sun
             is_static = to_bool(ring_data.get('is_static', False))
 
             # Orbital velocity (only for non-static rings)
@@ -293,12 +293,12 @@ class SimulationParameters:
                 velocity_mode = ring_data.get('velocity_mode', 'manual')
 
                 if velocity_mode == 'keplerian':
-                    # Calculate Keplerian orbital velocity: v = sqrt(G * M / r)
+                    # Calculate Keplerian orbital velocity: v = sqrt(G * M / r) in units of c
                     orbital_velocity = np.sqrt(const.G * M_central / radius)
                 elif velocity_mode == 'manual':
-                    # Use user-specified velocity
+                    # Use user-specified velocity (already as fraction of c)
                     if 'orbital_velocity_fraction_c' in ring_data:
-                        orbital_velocity = to_float(ring_data['orbital_velocity_fraction_c']) * const.c
+                        orbital_velocity = to_float(ring_data['orbital_velocity_fraction_c'])
                     else:
                         raise ValueError(f"{ring_name}: velocity_mode='manual' requires orbital_velocity_fraction_c")
                 else:
@@ -308,7 +308,7 @@ class SimulationParameters:
 
             # Capture radius (only for Ring 0)
             if ring_id == 0 and 'capture_radius_gly' in ring_data:
-                capture_radius = to_float(ring_data['capture_radius_gly']) * const.Gly_to_m
+                capture_radius = to_float(ring_data['capture_radius_gly']) * const.Gly  # Gly → ly
             else:
                 capture_radius = 0.0
 
@@ -325,24 +325,30 @@ class SimulationParameters:
         # Parse debris field parameters
         debris_data = config['debris_field']
         debris_count = to_int(debris_data['particle_count'])
-        debris_r_min = to_float(debris_data['position_min_gly']) * const.Gly_to_m
-        debris_r_max = to_float(debris_data['position_max_gly']) * const.Gly_to_m
-        debris_v_min = to_float(debris_data['velocity_min_fraction_c']) * const.c
-        debris_v_max = to_float(debris_data['velocity_max_fraction_c']) * const.c
+        debris_r_min = to_float(debris_data['position_min_gly']) * const.Gly  # Gly → ly
+        debris_r_max = to_float(debris_data['position_max_gly']) * const.Gly  # Gly → ly
+        debris_v_min = to_float(debris_data['velocity_min_fraction_c'])  # Already fraction of c
+        debris_v_max = to_float(debris_data['velocity_max_fraction_c'])  # Already fraction of c
         debris_distribution = debris_data.get('distribution', 'uniform')
 
         # Parse simulation control
         sim_control = config['simulation_control']
-        dt = to_float(sim_control['timestep_gyr']) * const.Gyr_to_s
-        duration = to_float(sim_control['duration_gyr']) * const.Gyr_to_s
-        output_interval = to_float(sim_control['output_interval_gyr']) * const.Gyr_to_s
-        checkpoint_interval = to_float(sim_control['checkpoint_interval_gyr']) * const.Gyr_to_s
+        dt = to_float(sim_control['timestep_gyr']) * 1.0e9  # Gyr → yr
+        duration = to_float(sim_control['duration_gyr']) * 1.0e9  # Gyr → yr
+        output_interval = to_float(sim_control['output_interval_gyr']) * 1.0e9  # Gyr → yr
+        checkpoint_interval = to_float(sim_control['checkpoint_interval_gyr']) * 1.0e9  # Gyr → yr
 
         # Parse physics options
         physics_opts = config['physics_options']
         force_method = physics_opts.get('force_method', 'direct')
-        include_debris_gravity = to_bool(physics_opts.get('include_debris_gravity', False))
-        use_relativistic_mass = to_bool(physics_opts.get('use_relativistic_mass', True))
+        use_newtonian_enhancements = to_bool(physics_opts.get('use_newtonian_enhancements', False))
+
+        # Validate: newtonian enhancements not supported
+        if use_newtonian_enhancements:
+            raise ValueError(
+                "use_newtonian_enhancements=true is not supported. "
+                "The simulation only supports Newtonian gravity with rest masses."
+            )
 
         # Barnes-Hut parameters
         barnes_hut_theta = 0.5
@@ -378,8 +384,7 @@ class SimulationParameters:
             output_interval=output_interval,
             checkpoint_interval=checkpoint_interval,
             force_method=force_method,
-            include_debris_gravity=include_debris_gravity,
-            use_relativistic_mass=use_relativistic_mass,
+            use_newtonian_enhancements=use_newtonian_enhancements,
             barnes_hut_theta=barnes_hut_theta,
             barnes_hut_max_particles_per_leaf=barnes_hut_max_particles_per_leaf,
             barnes_hut_tree_rebuild_interval=barnes_hut_tree_rebuild_interval,
@@ -392,16 +397,15 @@ class SimulationParameters:
         """Human-readable representation."""
         lines = [
             f"Simulation: {self.simulation_name}",
-            f"Central BH: {self.M_central * const.kg_to_solar_mass:.2e} M_sun",
+            f"Central BH: {self.M_central:.2e} M_sun",
             f"Rings: {len(self.rings)} configured",
         ]
         for ring in self.rings:
             lines.append(f"  {ring}")
         lines.extend([
             f"Debris: {self.debris_count} particles",
-            f"Duration: {self.duration * const.s_to_Gyr:.2f} Gyr",
-            f"Timestep: {self.dt * const.s_to_Gyr:.6f} Gyr",
+            f"Duration: {self.duration / 1.0e9:.2f} Gyr",
+            f"Timestep: {self.dt / 1.0e9:.6f} Gyr",
             f"Force method: {self.force_method}",
-            f"Debris gravity: {self.include_debris_gravity}",
         ])
         return "\n".join(lines)

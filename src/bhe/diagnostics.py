@@ -9,7 +9,7 @@ This module provides functions to detect:
 """
 
 import numpy as np
-from . import constants as const
+from bhe import constants as const
 
 
 def check_timestep_stability(state, params, history_length=100):
@@ -247,8 +247,8 @@ def check_timestep_against_courant(state, params):
     satisfies = ratio <= 1.0
 
     if ratio > 1.0:
-        warning = (f"Timestep ({dt_current * const.s_to_Gyr:.6f} Gyr) is {ratio:.1f}x "
-                   f"larger than Courant limit ({dt_courant * const.s_to_Gyr:.6f} Gyr). "
+        warning = (f"Timestep ({dt_current / 1.0e9:.6f} Gyr) is {ratio:.1f}x "
+                   f"larger than Courant limit ({dt_courant / 1.0e9:.6f} Gyr). "
                    "Integration may be unstable!")
     elif ratio > 0.5:
         warning = (f"Timestep is {ratio*100:.0f}% of Courant limit. "
